@@ -1,0 +1,108 @@
+# 构建目录
+build/
+dist/
+out/
+bin/
+lib/
+CMakeFiles/
+cmake_install.cmake
+CMakeCache.txt
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# 日志和缓存
+logs/
+*.log
+.cache/
+.ccls-cache/
+
+# IDE 配置文件
+.vscode/
+.idea/
+*.code-workspace
+.vs/
+.clangd/
+
+# 编辑器临时文件
+*.swp
+*.swo
+*~
+.*.swp
+.*.swo
+
+# 系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# C++ 编译产物
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.exe
+*.out
+*.app
+*.dSYM/
+
+# protobuf 生成的文件
+*.pb.cc
+*.pb.h
+*.grpc.pb.cc
+*.grpc.pb.h
+
+# 调试和分析文件
+*.pdb
+*.ilk
+*.map
+core
+core.*
+vgcore.*
+*.gcda
+*.gcno
+*.gcov
+callgrind.out.*
+cachegrind.out.*
+
+# 包管理
+conan/
+vcpkg_installed/
+third_party/
+vendor/
+
+# 配置和环境文件
+.env
+.env.*
+!.env.example
+config/local.json
+config/development.json
+config/production.json
+
+# 文档生成
+docs/_build/
+docs/html/
+docs/latex/
+*.doxygen
+
+# 测试覆盖率
+coverage/
+*.coverage
+htmlcov/
+
+# 备份文件
+*.bak
+*.backup
+*.orig
+
+# 临时目录
+tmp/
+temp/
+.tmp/

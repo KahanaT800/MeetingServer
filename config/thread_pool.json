@@ -1,0 +1,15 @@
+{
+  "queue_cap": 32768,
+  "core_threads": 8,
+  "max_threads": 16,
+  "keep_alive_ms": 5000,
+  "queue_policy": "Block",
+  "enable_dynamic_threads": true,
+  "load_check_interval_ms": 100,
+  "scale_up_threshold": 0.75,
+  "scale_down_threshold": 0.25,
+  "pending_hi": 4096,
+  "pending_low": 1024,
+  "debounce_hits": 3,
+  "cooldown_ms": 500
+}
