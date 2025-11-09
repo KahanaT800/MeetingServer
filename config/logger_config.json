@@ -1,0 +1,30 @@
+{
+  "logger": {
+    "name": "mpmc-threadpool",
+    "level": "warn",
+    "flush_level": "error",
+    "pattern": "[%Y-%m-%d %H:%M:%S.%e][%^%l%$][%t] %v",
+    "async": true,
+    "async_queue_size": 8192,
+    "async_workers": 1,
+    "enable_backtrace": false,
+    "backtrace_depth": 0
+  },
+  "sinks": [
+    {
+      "type": "console",
+      "enabled": true,
+      "pattern": "",
+      "level": "error"
+    },
+    {
+      "type": "rotating_file",
+      "file_path": "logs/pool.log",
+      "max_size": 10485760,
+      "max_files": 5,
+      "rotate_on_open": true,
+      "pattern": "",
+      "level": "info"
+    }
+  ]
+}
