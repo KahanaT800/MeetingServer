@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+import "common.proto";
+
+package proto.meeting;
+
+service MeetingService {
+    rpc CreateMeeting(CreateMeetingRequest) returns (CreateMeetingResponse);  // 创建会议
+    rpc JoinMeeting(JoinMeetingRequest) returns (JoinMeetingResponse);        // 加入会议
+    rpc LeaveMeeting(LeaveMeetingRequest) returns (LeaveMeetingResponse);     // 离开会议
+    rpc EndMeeting(EndMeetingRequest) returns (EndMeetingResponse);           // 结束会议
+    rpc GetMeeting(GetMeetingRequest) returns (GetMeetingResponse);           // 获取会议
+}
+
+// 创建会议请求
+message CreateMeetingRequest {
+    string                    session_token   = 1;  // 会话令牌
+    string                    topic           = 2;  // 会议主题
+    .proto.common.Timestamp scheduled_start = 3;  // 会议开始时间
+}
+// 创建会议响应
+message CreateMeetingResponse {
+    .proto.common.Error       error   = 1;  // 错误信息
+    .proto.common.MeetingInfo meeting = 2;  // 会议信息
+}
+
+// 加入会议请求
+message JoinMeetingRequest {
+    string session_token = 1;  // 会话令牌
+    string meeting_id    = 2;  // 会议ID
+    string client_info   = 3;  // 客户端信息
+}
+
+// 加入会议响应
+message JoinMeetingResponse {
+    .proto.common.Error          error    = 1;  // 错误信息
+    .proto.common.ServerEndpoint endpoint = 2;  // 服务器端点信息
+    .proto.common.MeetingInfo    meeting  = 3;  // 会议信息
+}
+
+// 离开会议请求
+message LeaveMeetingRequest {
+    string session_token = 1;  // 会话令牌
+    string meeting_id    = 2;  // 会议ID
+}
+
+// 离开会议响应
+message LeaveMeetingResponse {
+    .proto.common.Error error = 1;  // 错误信息
+}
+
+// 结束会议请求
+message EndMeetingRequest {
+    string session_token = 1;  // 会话令牌
+    string meeting_id    = 2;  // 会议ID
+}
+
+// 结束会议响应
+message EndMeetingResponse {
+    .proto.common.Error error = 1;  // 错误信息
+}
+
+// 获取会议请求
+message GetMeetingRequest {
+    string session_token = 1;  // 会话令牌
+    string meeting_id    = 2;  // 会议ID
+}
+
+// 获取会议响应
+message GetMeetingResponse {
+    .proto.common.Error       error   = 1;  // 错误信息
+    .proto.common.MeetingInfo meeting = 2;  // 会议信息
+}

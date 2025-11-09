@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package proto.common;
+
+message Error {
+    int32  code    = 1;  // 错误码， 0表示无错误
+    string message = 2;  // 错误描述
+}
+
+message Timestamp {
+    int64 seconds = 1;
+    int32 nanos = 2;
+}
+
+message UserInfo {
+    string    user_id      = 1;  // 用户ID
+    string    user_name    = 2;  // 登录名
+    string    display_name = 3;  // 显示名称
+    string    email        = 4;  // 电子邮件
+    Timestamp created_at   = 5;  // 创建时间
+    Timestamp last_login   = 6;  // 最后登录时间
+}
+
+message MeetingInfo {
+    string    meeting_id             = 1;  // 会议ID
+    string    organizer_id           = 2;  // 组织者ID
+    string    topic                  = 3;  // 主题
+    Timestamp start_time             = 4;  // 开始时间
+    Timestamp end_time               = 5;  // 结束时间
+    repeated  string participant_ids = 6;  // 参与者ID列表
+    string    state                  = 7;  // 会议状态(SCHEDULED, ONGOING, ENDED)
+}
+
+message ServerEndpoint {
+    string ip     = 1;  // IP地址
+    int32  port   = 2;  // 端口号
+    string region = 3;  // 区域信息
+}

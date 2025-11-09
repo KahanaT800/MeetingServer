@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+import "common.proto";
+
+package proto.user;
+
+service UserService {
+    rpc Register (RegisterRequest) returns (RegisterResponse);
+    rpc Login(LoginRequest) returns (LoginResponse);
+    rpc Logout(LogoutRequest) returns (LogoutResponse);
+    rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
+}
+
+// 注册请求
+message RegisterRequest {
+    string user_name    = 1;  // 登录名
+    string password     = 2;  // 密码
+    string email        = 3;  // 电子邮件
+    string display_name = 4;  // 显示名称
+}
+
+// 注册响应
+message RegisterResponse {
+    .proto.common.Error    error = 1;  // 错误信息
+    .proto.common.UserInfo user  = 2;  // 用户信息
+}
+
+// 登录请求
+message LoginRequest {
+    string user_name = 1;  // 登录名
+    string password  = 2;  // 密码
+}
+
+// 登录响应
+message LoginResponse {
+    .proto.common.Error    error         = 1;  // 错误信息
+    string                 session_token = 2;  // 会话令牌
+    .proto.common.UserInfo user          = 3;  // 用户信息
+}
+
+// 登出请求
+message LogoutRequest {
+    string session_token = 1;  // 会话令牌
+}
+
+// 登出响应
+message LogoutResponse {
+    .proto.common.Error error = 1;  // 错误信息
+}
+
+// 获取用户资料请求
+message GetProfileRequest {
+    string session_token = 1;  // 会话令牌
+}
+
+// 获取用户资料响应
+message GetProfileResponse {
+    .proto.common.Error    error = 1;  // 错误信息
+    .proto.common.UserInfo user  = 2;  // 用户信息
+}

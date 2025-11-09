@@ -1,6 +1,10 @@
 # src/CMakeLists.txt
+
+# Proto文件生成规则
 set(PROTO_FILES
-    ${CMAKE_SOURCE_DIR}/proto/health.proto
+    ${CMAKE_SOURCE_DIR}/proto/common.proto
+    ${CMAKE_SOURCE_DIR}/proto/user_service.proto
+    ${CMAKE_SOURCE_DIR}/proto/meeting_service.proto
 )
 
 set(GENERATED_SRCS "")
@@ -14,7 +18,7 @@ add_library(meeting_proto STATIC
 )
 target_include_directories(meeting_proto
     PUBLIC
-        ${CMAKE_CURRENT_BINARY_DIR}  # 生成的头文件在这里
+        ${CMAKE_CURRENT_BINARY_DIR}
 )
 target_link_libraries(meeting_proto
     PUBLIC
@@ -22,6 +26,7 @@ target_link_libraries(meeting_proto
         protobuf::libprotobuf
 )
 
+# 线程池库
 add_library(thread_pool STATIC
     thread_pool/src/thread_pool.cpp
     thread_pool/src/config.cpp
@@ -30,6 +35,7 @@ add_library(thread_pool STATIC
 target_include_directories(thread_pool
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/thread_pool/include
+        ${CMAKE_BINARY_DIR}/src  # 为生成的配置头文件
 )
 target_link_libraries(thread_pool
     PUBLIC
@@ -38,33 +44,66 @@ target_link_libraries(thread_pool
         nlohmann_json::nlohmann_json
 )
 
-add_executable(meeting_server
-    server/main.cpp
-    server/health_service.cpp
+# 用户核心库 (业务逻辑)
+add_library(user_core STATIC
+    core/user/user_manager.cpp
+    core/user/session_manager.cpp
+)
+target_include_directories(user_core
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_BINARY_DIR}/src  # 为生成的配置头文件
+)
+target_link_libraries(user_core
+    PUBLIC
+        meeting_proto
+        OpenSSL::SSL
+        OpenSSL::Crypto
 )
 
-add_executable(health_client
-    client/health_client.cpp
+# 用户服务库 (gRPC 服务实现)
+add_library(user_service STATIC
+    server/user_service_impl.cpp
+)
+target_include_directories(user_service
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_BINARY_DIR}/src  # 为生成的配置头文件
+)
+target_link_libraries(user_service
+    PUBLIC
+        user_core
+        thread_pool
+        meeting_proto
+        gRPC::grpc++
 )
 
-target_include_directories(meeting_server
-    PRIVATE
+# 会议核心库 (业务逻辑)
+add_library(meeting_core STATIC
+    core/meeting/meeting_manager.cpp
+)
+target_include_directories(meeting_core
+    PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
+target_link_libraries(meeting_core
+    PUBLIC
+        meeting_proto
+)
 
-target_include_directories(health_client
-    PRIVATE
+# 会议服务库 (gRPC 服务实现)
+add_library(meeting_service STATIC
+    server/meeting_service_impl.cpp
+)
+target_include_directories(meeting_service
+    PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
-target_link_libraries(meeting_server
-    PRIVATE
+target_link_libraries(meeting_service
+    PUBLIC
+        meeting_core
         meeting_proto
         thread_pool
-        fmt::fmt
+        gRPC::grpc++
 )
 
-target_link_libraries(health_client
-    PRIVATE
-        meeting_proto
-        fmt::fmt
-)

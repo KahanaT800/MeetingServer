@@ -1,0 +1,28 @@
+#pragma once
+
+#include <string>
+#include <filesystem>
+
+namespace meeting {
+namespace common {
+
+// 项目根目录路径
+constexpr const char* kProjectRootPath = "@PROJECT_SOURCE_DIR@";
+
+// 配置文件目录路径
+inline std::string GetConfigPath(const std::string& config_filename) {
+    return std::filesystem::path(kProjectRootPath) / "config" / config_filename;
+}
+
+// 获取日志配置文件路径
+inline std::string GetLoggerConfigPath() {
+    return GetConfigPath("logger_config.json");
+}
+
+// 获取线程池配置文件路径
+inline std::string GetThreadPoolConfigPath() {
+    return GetConfigPath("thread_pool.json");
+}
+
+} // namespace common
+} // namespace meeting
