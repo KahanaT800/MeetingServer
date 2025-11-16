@@ -7,6 +7,10 @@ set -e
 cd build/debug
 
 # 运行测试
+
+echo "运行配置与日志测试..."
+./tests/config_logger_test
+
 echo "运行用户管理器测试..."
 ./tests/user_manager_test
 

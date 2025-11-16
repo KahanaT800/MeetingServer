@@ -5,16 +5,11 @@ namespace server {
 
 namespace {
 
-thread_pool::ThreadPool CreateThreadPool() {
-    // 初始化线程池日志器
-    thread_pool::log::InitFromFile(meeting::common::GetLoggerConfigPath());
-    // 加载线程池配置
-    auto loader = thread_pool::ThreadPoolConfigLoader::FromFile(
-        meeting::common::GetThreadPoolConfigPath());
+thread_pool::ThreadPool CreateThreadPool(const std::string& config_path) {
+    auto loader = thread_pool::ThreadPoolConfigLoader::FromFile(config_path);
     if (loader.has_value()) {
         return thread_pool::ThreadPool(loader->GetConfig());
     }
-    // 配置文件加载失败，使用默认参数
     return thread_pool::ThreadPool(4, 1024);
 }
 
@@ -39,11 +34,14 @@ meeting::core::MeetingErrorCode MapStatus(const meeting::common::Status& status)
 
 } // namespace
 
-MeetingServiceImpl::MeetingServiceImpl()
+MeetingServiceImpl::MeetingServiceImpl(): MeetingServiceImpl(meeting::common::GetThreadPoolConfigPath()) {}
+
+MeetingServiceImpl::MeetingServiceImpl(const std::string& thread_pool_config_path)
     : meeting_manager_(std::make_unique<meeting::core::MeetingManager>())
-    , thread_pool_(CreateThreadPool()) {
+    , thread_pool_(CreateThreadPool(thread_pool_config_path)) {
     thread_pool_.Start();
 }
+
 
 MeetingServiceImpl::~MeetingServiceImpl() {
     thread_pool_.Stop();

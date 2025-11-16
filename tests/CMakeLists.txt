@@ -14,6 +14,26 @@ include_directories(
 
 # 测试单元
 
+# 配置与日志测试
+add_executable(config_logger_test
+    unit/config_logger_test.cpp
+)
+
+target_link_libraries(config_logger_test
+    PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        meeting_common
+        thread_pool
+)
+
+add_test(NAME ConfigLoggerTest COMMAND config_logger_test)
+
+set_target_properties(config_logger_test
+    PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+
 # 用户管理器单元测试
 add_executable(user_manager_test
     unit/user_manager_test.cpp

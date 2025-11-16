@@ -26,6 +26,22 @@ target_link_libraries(meeting_proto
         protobuf::libprotobuf
 )
 
+# 配置和日志公共库
+add_library(meeting_common STATIC
+    common/config_loader.cpp
+    common/logger.cpp
+)
+target_include_directories(meeting_common
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_BINARY_DIR}/src
+)
+target_link_libraries(meeting_common
+    PUBLIC
+        nlohmann_json::nlohmann_json
+        spdlog::spdlog
+)
+
 # 线程池库
 add_library(thread_pool STATIC
     thread_pool/src/thread_pool.cpp
@@ -72,6 +88,7 @@ target_include_directories(user_service
 )
 target_link_libraries(user_service
     PUBLIC
+        meeting_common
         user_core
         thread_pool
         meeting_proto
@@ -101,7 +118,27 @@ target_include_directories(meeting_service
 )
 target_link_libraries(meeting_service
     PUBLIC
+        meeting_common
         meeting_core
+        meeting_proto
+        thread_pool
+        gRPC::grpc++
+)
+
+# meeting_server executable
+add_executable(meeting_server
+    server/main.cpp
+)
+target_include_directories(meeting_server
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_BINARY_DIR}/src
+)
+target_link_libraries(meeting_server
+    PRIVATE
+        meeting_service
+        meeting_common
+        user_service
         meeting_proto
         thread_pool
         gRPC::grpc++

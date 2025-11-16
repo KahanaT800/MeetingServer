@@ -5,24 +5,22 @@ namespace meeting {
 namespace server {
 
 namespace {
-thread_pool::ThreadPool CreateThreadPool() {
-    // 初始化线程池日志器
-    thread_pool::log::InitFromFile(meeting::common::GetLoggerConfigPath());
-    // 加载线程池配置
-    auto loader = thread_pool::ThreadPoolConfigLoader::FromFile(
-        meeting::common::GetThreadPoolConfigPath());
-    if (loader.has_value()) {
-        return thread_pool::ThreadPool(loader->GetConfig());
+thread_pool::ThreadPool CreateUserThreadPool(const std::string& path) {
+    auto config_loader = thread_pool::ThreadPoolConfigLoader::FromFile(path);
+    if (config_loader.has_value()) {
+        return thread_pool::ThreadPool(config_loader->GetConfig());
     }
-    // 配置文件加载失败，使用默认参数
-    return thread_pool::ThreadPool(4, 1024);
+    return thread_pool::ThreadPool(4, 5000);
 }
+
 } // namespace
 
-UserServiceImpl::UserServiceImpl() 
+UserServiceImpl::UserServiceImpl(): UserServiceImpl(meeting::common::GetThreadPoolConfigPath()) {}
+
+UserServiceImpl::UserServiceImpl(const std::string& thread_pool_config_path)
     : user_manager_(std::make_unique<meeting::core::UserManager>())
     , session_manager_(std::make_unique<meeting::core::SessionManager>())
-    , thread_pool_(CreateThreadPool()) {
+    , thread_pool_(CreateUserThreadPool(thread_pool_config_path)) {
     // 启动线程池
     thread_pool_.Start();
 }
@@ -39,6 +37,7 @@ grpc::Status UserServiceImpl::Register(grpc::ServerContext*
                                          , request->password()
                                          , request->email()
                                          , request->display_name()};
+    MEETING_LOG_INFO("[UserService] Register user={}", command.user_name);                                     
     auto future = thread_pool_.Submit([this, command]() {
         return user_manager_->RegisterUser(command);
     });
@@ -76,6 +75,7 @@ grpc::Status UserServiceImpl::Login(grpc::ServerContext*
                                          , request->password()
                                          , ""
                                          , ""};
+    MEETING_LOG_INFO("[UserService] Login user={}", command.user_name);                                     
     auto login_future = thread_pool_.Submit([this, command]() {
         return user_manager_->LoginUser(command);
     });
@@ -119,6 +119,7 @@ grpc::Status UserServiceImpl::Login(grpc::ServerContext*
 grpc::Status UserServiceImpl::Logout(grpc::ServerContext* /*context*/,
                                       const proto::user::LogoutRequest* request,
                                       proto::user::LogoutResponse* response) {
+    MEETING_LOG_INFO("[UserService] Logout session_token={}...", request->session_token().substr(0, 6));                                    
     auto logout_future = thread_pool_.Submit([this, token = request->session_token()]() {
         return session_manager_->DeleteSession(token);
     });

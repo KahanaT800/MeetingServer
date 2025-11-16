@@ -4,7 +4,8 @@
 #include "core/meeting/errors.hpp"
 #include "thread_pool/config.hpp"
 #include "thread_pool/thread_pool.hpp"
-#include "logger.hpp"
+#include "common/logger.hpp"
+#include "config_path.hpp"
 #include "meeting_service.grpc.pb.h"
 
 #include <grpcpp/grpcpp.h>
@@ -17,6 +18,7 @@ namespace server {
 class MeetingServiceImpl final : public proto::meeting::MeetingService::Service {
 public:
     MeetingServiceImpl();
+    explicit MeetingServiceImpl(const std::string& thread_pool_config_path);
     ~MeetingServiceImpl();
 
     grpc::Status CreateMeeting(grpc::ServerContext* context
