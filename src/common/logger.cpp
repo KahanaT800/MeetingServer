@@ -19,7 +19,7 @@ namespace common {
 namespace {
 
 std::shared_ptr<spdlog::logger> g_logger;
-
+//  日志级别解析辅助函数
 void LogLevelFallback(const std::string& level,
                       std::string_view reason,
                       spdlog::level::level_enum fallback) noexcept {
@@ -30,9 +30,11 @@ void LogLevelFallback(const std::string& level,
                  spdlog::level::to_string_view(fallback).data());
 }
 
+// 安全解析日志级别字符串
 spdlog::level::level_enum SafeParseLevel(
     const std::string& level, spdlog::level::level_enum fallback) noexcept {
     std::string normalized = level;
+    // 转为小写
     std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
     });
@@ -59,6 +61,7 @@ spdlog::level::level_enum SafeParseLevel(
     }
 }
 
+// 确保日志文件的父目录存在
 void EnsureParentDirectory(const std::filesystem::path& path) {
     auto parent = path.parent_path();
     if (parent.empty()) {
@@ -75,14 +78,18 @@ void EnsureParentDirectory(const std::filesystem::path& path) {
 
 void InitLogger(const LoggingConfig& config) {
     std::vector<spdlog::sink_ptr> sinks;
+    // 控制台日志接收器
     if (config.console) {
         sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
     }
+    // 文件日志接收器
     if (!config.file.empty()) {
         std::filesystem::path log_path{config.file};
         EnsureParentDirectory(log_path);
         sinks.push_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>(log_path.string(), true));
     }
+
+    // 创建全局日志器
     g_logger = std::make_shared<spdlog::logger>("meeting_server", sinks.begin(), sinks.end());
     g_logger->set_level(SafeParseLevel(config.level, spdlog::level::info));
     g_logger->set_pattern(config.pattern);

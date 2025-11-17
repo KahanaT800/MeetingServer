@@ -12,8 +12,9 @@ namespace common {
 
 namespace {
 AppConfig g_config;
-bool g_config_initialized = false;
+bool g_config_initialized = false; // 全局配置初始化标志
 
+// 检测配置文件路径
 std::string DetectConfigPath() {
      if (const char* env = std::getenv("MEETING_SERVER_CONFIG")) {
         return env;
@@ -48,13 +49,17 @@ nlohmann::json ConfigLoader::ReadFile(const std::string& path) {
     return nlohmann::json::parse(ifs, nullptr, true, true);
 }
 
+// 从JSON对象构建配置结构体
 AppConfig ConfigLoader::FromJson(const nlohmann::json& j) {
     AppConfig cfg;
+    // 解析各个配置部分
+    // Server配置
     if (j.contains("server")) {
         const auto& server = j["server"];
         cfg.server.host = server.value("host", cfg.server.host);
         cfg.server.port = server.value("port", cfg.server.port);
     }
+    // Logging配置
     if (j.contains("logging")) {
         const auto& logging = j["logging"];
         cfg.logging.level = logging.value("level", cfg.logging.level);
@@ -64,15 +69,19 @@ AppConfig ConfigLoader::FromJson(const nlohmann::json& j) {
         cfg.logging.integrate_thread_pool_logger =
             logging.value("integrate_thread_pool_logger", cfg.logging.integrate_thread_pool_logger);
     }
+    // ThreadPool配置
     if (j.contains("thread_pool")) {
         cfg.thread_pool.config_path = j["thread_pool"].value("config_path", cfg.thread_pool.config_path);
     }
+    // GeoIP配置
     if (j.contains("geoip")) {
         cfg.geoip.db_path = j["geoip"].value("db_path", cfg.geoip.db_path);
     }
+    // Zookeeper配置
     if (j.contains("zookeeper")) {
         cfg.zookeeper.hosts = j["zookeeper"].value("hosts", cfg.zookeeper.hosts);
     }
+    // Storage配置
     if (j.contains("storage")) {
         const auto& storage = j["storage"];
         if (storage.contains("mysql")) {

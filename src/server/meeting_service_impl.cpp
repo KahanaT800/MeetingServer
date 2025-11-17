@@ -51,6 +51,8 @@ grpc::Status MeetingServiceImpl::CreateMeeting(grpc::ServerContext*
                                                 , const proto::meeting::CreateMeetingRequest* request
                                                 , proto::meeting::CreateMeetingResponse* response) {
     meeting::core::CreateMeetingCommand command{request->session_token(), request->topic()};
+    MEETING_LOG_INFO("[MeetingService] CreateMeeting topic={} organizer={}",
+                     command.topic, command.organizer_id);
     auto create_future = thread_pool_.Submit([this, command]() {
         return meeting_manager_->CreateMeeting(command);
     });
@@ -72,6 +74,8 @@ grpc::Status MeetingServiceImpl::JoinMeeting(grpc::ServerContext*
                                               , const proto::meeting::JoinMeetingRequest* request
                                               , proto::meeting::JoinMeetingResponse* response) {
     meeting::core::JoinMeetingCommand command{request->meeting_id(), request->session_token()};
+    MEETING_LOG_INFO("[MeetingService] JoinMeeting meeting={} participant={}",
+                     command.meeting_id, command.participant_id);
     auto join_future = thread_pool_.Submit([this, command]() {
         return meeting_manager_->JoinMeeting(command);
     });
@@ -97,6 +101,8 @@ grpc::Status MeetingServiceImpl::LeaveMeeting(grpc::ServerContext*
                                               , const proto::meeting::LeaveMeetingRequest* request
                                               , proto::meeting::LeaveMeetingResponse* response) {
     meeting::core::LeaveMeetingCommand command{request->meeting_id(), request->session_token()};
+    MEETING_LOG_INFO("[MeetingService] LeaveMeeting meeting={} participant={}",
+                     command.meeting_id, command.participant_id);
     auto leave_future = thread_pool_.Submit([this, command]() {
         return meeting_manager_->LeaveMeeting(command);
     });
@@ -116,6 +122,8 @@ grpc::Status MeetingServiceImpl::EndMeeting(grpc::ServerContext*
                                              , const proto::meeting::EndMeetingRequest* request
                                              , proto::meeting::EndMeetingResponse* response) {
     meeting::core::EndMeetingCommand command{request->meeting_id(), request->session_token()};
+    MEETING_LOG_INFO("[MeetingService] EndMeeting meeting={} requester={}",
+                     command.meeting_id, command.requester_id);
     auto end_future = thread_pool_.Submit([this, command]() {
         return meeting_manager_->EndMeeting(command);
     });
@@ -137,6 +145,7 @@ grpc::Status MeetingServiceImpl::GetMeeting(grpc::ServerContext*
     auto get_future = thread_pool_.Submit([this, id = request->meeting_id()]() {
         return meeting_manager_->GetMeeting(id);
     });
+    MEETING_LOG_INFO("[MeetingService] GetMeeting meeting={}", request->meeting_id());
     auto status_or_meeting = get_future.get();
     if (!status_or_meeting.IsOk()) {
         auto code = MapStatus(status_or_meeting.GetStatus());

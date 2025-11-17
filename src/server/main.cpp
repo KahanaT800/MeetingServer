@@ -5,7 +5,20 @@
 #include "server/user_service_impl.hpp"
 
 #include <cstdlib>
+#include <csignal>
+#include <chrono>
 #include <grpcpp/grpcpp.h>
+#include <thread>
+
+namespace {
+
+volatile std::sig_atomic_t g_stop_signal = 0;
+
+void HandleSignal(int signal) {
+    g_stop_signal = signal;
+}
+
+} // namespace
 
 int main(int argc, char** argv) {
     std::string config_path;
@@ -44,7 +57,20 @@ int main(int argc, char** argv) {
     }
 
     MEETING_LOG_INFO("Meeting server listening on {}", address);
+
+    std::signal(SIGINT, HandleSignal);
+    std::signal(SIGTERM, HandleSignal);
+
+    std::thread shutdown_thread([&server]() {
+        while (g_stop_signal == 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        }
+        MEETING_LOG_WARN("Signal {} received, shutting down gRPC server...", g_stop_signal);
+        server->Shutdown(std::chrono::system_clock::now() + std::chrono::seconds(5));
+    });
+
     server->Wait();
+    shutdown_thread.join();
     meeting::common::ShutdownLogger();
     return EXIT_SUCCESS;
 }
