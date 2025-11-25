@@ -23,4 +23,7 @@ echo "运行会议管理器测试..."
 echo "运行会议服务测试..."
 ./tests/meeting_service_test
 
+echo "运行MySQL存储测试..."
+./tests/storage_mysql_test
+
 echo "所有测试完成！"

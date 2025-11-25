@@ -95,6 +95,23 @@ target_link_libraries(meeting_service_test
 )
 add_test(NAME MeetingServiceTest COMMAND meeting_service_test)
 
+# MySQL 存储单元测试
+add_executable(storage_mysql_test
+    unit/mysql_test.cpp
+)
+target_link_libraries(storage_mysql_test    
+    PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        storage_mysql
+        user_core
+)
+set_target_properties(storage_mysql_test
+    PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+add_test(NAME StorageMySQLTest COMMAND storage_mysql_test)
+
 # 设置测试输出目录
 set_target_properties(meeting_manager_test meeting_service_test
     PROPERTIES

@@ -4,10 +4,9 @@
 #include "common/status_or.hpp"
 #include "core/user/errors.hpp"
 
+#include <memory>
 #include <optional>
-#include <shared_mutex>
 #include <string>
-#include <unordered_map>
 
 namespace meeting {
 namespace core {
@@ -42,7 +41,7 @@ public:
     using Status = meeting::common::Status;
     using StatusOrUser = meeting::common::StatusOr<UserData>;
 
-    UserManager() = default;
+    explicit UserManager(std::shared_ptr<class UserRepository> repository = nullptr);
 
     // 用户管理
     Status RegisterUser(const RegisterCommand& command);
@@ -56,9 +55,7 @@ private:
     std::string GenerateSalt() const;
     std::string HashPassword(const std::string& password, const std::string& salt) const;
 
-    mutable std::shared_mutex mutex_;
-    std::unordered_map<std::string, UserData> users_by_user_name_;
-    std::unordered_map<std::string, UserData> users_by_id_;
+    std::shared_ptr<UserRepository> repository_;
 };
 
 }

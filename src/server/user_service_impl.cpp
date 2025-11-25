@@ -1,6 +1,11 @@
 #include "server/user_service_impl.hpp"
+#include "common/config_loader.hpp"
 #include "config_path.hpp"
+#include "core/user/user_repository.hpp"
+#include "storage/mysql/connection_pool.hpp"
+#include "storage/mysql/user_repository.hpp"
 
+#include <chrono>
 namespace meeting {
 namespace server {
 
@@ -13,12 +18,45 @@ thread_pool::ThreadPool CreateUserThreadPool(const std::string& path) {
     return thread_pool::ThreadPool(4, 5000);
 }
 
+std::shared_ptr<meeting::core::UserRepository> CreateUserRepository() {
+    const auto& config = meeting::common::GlobalConfig();
+    if (!config.storage.mysql.enabled) {
+        MEETING_LOG_WARN("[UserService] MySQL backend disabled; using in-memory repository");
+        // 使用内存中的用户仓库作为后备方案
+        return std::make_shared<meeting::core::InMemoryUserRepository>();
+    }
+
+    meeting::storage::Options options;
+    options.host = config.storage.mysql.host;
+    options.port = static_cast<std::uint16_t>(config.storage.mysql.port);
+    options.user = config.storage.mysql.user;
+    options.password = config.storage.mysql.password;
+    options.database = config.storage.mysql.database;
+    options.pool_size = static_cast<std::size_t>(config.storage.mysql.pool_size);
+    options.acquire_timeout = std::chrono::milliseconds(config.storage.mysql.connection_timeout_ms);
+    options.connect_timeout = std::chrono::milliseconds(config.storage.mysql.connection_timeout_ms);
+    options.read_timeout = std::chrono::milliseconds(config.storage.mysql.read_timeout_ms);
+    options.write_timeout = std::chrono::milliseconds(config.storage.mysql.write_timeout_ms);
+
+    auto pool = std::make_shared<meeting::storage::ConnectionPool>(options);
+    auto test_conn = pool->Acquire();
+    if (!test_conn.IsOk()) {
+        MEETING_LOG_ERROR("[UserService] Failed to initialize MySQL connection: {}", test_conn.GetStatus().Message());
+        // 使用内存中的用户仓库作为后备方案
+        return std::make_shared<meeting::core::InMemoryUserRepository>();
+    }
+
+    // 成功创建连接池
+    MEETING_LOG_INFO("[UserService] MySQL connection pool initialized successfully");
+    return std::make_shared<meeting::storage::MySQLUserRepository>(std::move(pool));
+}
+
 } // namespace
 
 UserServiceImpl::UserServiceImpl(): UserServiceImpl(meeting::common::GetThreadPoolConfigPath()) {}
 
 UserServiceImpl::UserServiceImpl(const std::string& thread_pool_config_path)
-    : user_manager_(std::make_unique<meeting::core::UserManager>())
+    : user_manager_(std::make_unique<meeting::core::UserManager>(CreateUserRepository()))
     , session_manager_(std::make_unique<meeting::core::SessionManager>())
     , thread_pool_(CreateUserThreadPool(thread_pool_config_path)) {
     // 启动线程池

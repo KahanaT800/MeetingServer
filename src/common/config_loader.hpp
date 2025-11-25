@@ -18,5 +18,8 @@ private:
     static nlohmann::json ReadFile(const std::string& path);
 };
 
+// 获取全局配置单例
+const AppConfig& GlobalConfig();
+
 }
 }

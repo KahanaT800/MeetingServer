@@ -60,10 +60,30 @@ target_link_libraries(thread_pool
         nlohmann_json::nlohmann_json
 )
 
+# Storage MySQL库
+add_library(storage_mysql STATIC
+    storage/mysql/connection.cpp
+    storage/mysql/connection_pool.cpp
+    storage/mysql/user_repository.cpp
+)
+target_include_directories(storage_mysql
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_BINARY_DIR}/src
+)
+target_link_libraries(storage_mysql
+    PUBLIC
+        meeting_common
+        user_core
+        fmt::fmt
+        mysqlclient
+)
+
 # 用户核心库 (业务逻辑)
 add_library(user_core STATIC
     core/user/user_manager.cpp
     core/user/session_manager.cpp
+    core/user/user_repository.cpp
 )
 target_include_directories(user_core
     PUBLIC
@@ -89,6 +109,7 @@ target_include_directories(user_service
 target_link_libraries(user_service
     PUBLIC
         meeting_common
+        storage_mysql
         user_core
         thread_pool
         meeting_proto
@@ -124,6 +145,8 @@ target_link_libraries(meeting_service
         thread_pool
         gRPC::grpc++
 )
+
+
 
 # meeting_server executable
 add_executable(meeting_server
