@@ -65,6 +65,8 @@ add_library(storage_mysql STATIC
     storage/mysql/connection.cpp
     storage/mysql/connection_pool.cpp
     storage/mysql/user_repository.cpp
+    storage/mysql/transaction.cpp
+    storage/mysql/meeting_repository.cpp
 )
 target_include_directories(storage_mysql
     PUBLIC
@@ -75,6 +77,7 @@ target_link_libraries(storage_mysql
     PUBLIC
         meeting_common
         user_core
+        meeting_core
         fmt::fmt
         mysqlclient
 )
@@ -119,6 +122,7 @@ target_link_libraries(user_service
 # 会议核心库 (业务逻辑)
 add_library(meeting_core STATIC
     core/meeting/meeting_manager.cpp
+    core/meeting/meeting_repository.cpp
 )
 target_include_directories(meeting_core
     PUBLIC
@@ -140,6 +144,7 @@ target_include_directories(meeting_service
 target_link_libraries(meeting_service
     PUBLIC
         meeting_common
+        storage_mysql
         meeting_core
         meeting_proto
         thread_pool

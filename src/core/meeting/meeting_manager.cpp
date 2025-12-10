@@ -1,4 +1,5 @@
 #include "core/meeting/meeting_manager.hpp"
+#include "core/meeting/meeting_repository.hpp"
 
 #include <algorithm>
 #include <mutex>
@@ -33,11 +34,16 @@ std::string RandomAlphanumericString(std::size_t length) {
 
 } // namespace
 
-MeetingManager::MeetingManager(MeetingConfig config)
-    : config_(std::move(config)) {}
+MeetingManager::MeetingManager(MeetingConfig config, std::shared_ptr<MeetingRepository> repository)
+    : config_(std::move(config))
+    , repository_(std::move(repository)) {
+    if (!repository_) {
+        repository_ = std::make_shared<InMemoryMeetingRepository>();
+    }
+}
 
 MeetingManager::StatusOrMeeting MeetingManager::CreateMeeting(const CreateMeetingCommand& command) {
-    if (command.organizer_id.empty()) {
+    if (command.organizer_id == 0) {
         return Status::InvalidArgument("Organizer ID cannot be empty.");
     }
 
@@ -45,6 +51,7 @@ MeetingManager::StatusOrMeeting MeetingManager::CreateMeeting(const CreateMeetin
         return Status::InvalidArgument("Meeting topic cannot be empty.");
     }
 
+    // 构造会议数据
     MeetingData meeting;
     meeting.meeting_id = GenerateMeetingID();
     meeting.meeting_code = GenerateMeetingCode();
@@ -55,14 +62,16 @@ MeetingManager::StatusOrMeeting MeetingManager::CreateMeeting(const CreateMeetin
     meeting.updated_at = meeting.created_at;
     meeting.participants.push_back(command.organizer_id);
 
-    {
-        // 确保 meeting_id 和 meeting_code 唯一
-        std::unique_lock<std::shared_mutex> lock(mutex_);
-        if (code_index_.count(meeting.meeting_code) != 0) {
-            return Status::Internal("Meeting code collision");
-        }
-        code_index_[meeting.meeting_code] = meeting.meeting_id; // 建立索引
-        meetings_.emplace(meeting.meeting_id, meeting); // 存储会议数据
+    // 存储会议数据
+    auto status = repository_->CreateMeeting(meeting);
+    if (!status.IsOk()) {
+        return status.GetStatus();
+    }
+
+    // 添加组织者为参与者
+    auto add_status = repository_->AddParticipant(meeting.meeting_id, meeting.organizer_id, true);
+    if (!add_status.IsOk() &&  add_status.Code() != meeting::common::StatusCode::kAlreadyExists) {
+        return add_status;
     }
 
     return StatusOrMeeting(std::move(meeting));
@@ -72,17 +81,17 @@ MeetingManager::StatusOrMeeting MeetingManager::JoinMeeting(const JoinMeetingCom
     if (command.meeting_id.empty()) {
         return Status::InvalidArgument("Meeting ID cannot be empty.");
     }
-    if (command.participant_id.empty()) {
+    if (command.participant_id == 0) {
         return Status::InvalidArgument("Participant ID cannot be empty.");
     }
 
-    std::unique_lock<std::shared_mutex> lock(mutex_);
-    auto it = meetings_.find(command.meeting_id); // 查找会议
-    if (it == meetings_.end()) {
-        return Status::NotFound("Meeting not found.");
+    // 获取会议信息
+    auto meeting_or = repository_->GetMeeting(command.meeting_id);
+    if (!meeting_or.IsOk()) {
+        return meeting_or.GetStatus();
     }
+    auto meeting = meeting_or.Value();
 
-    MeetingData& meeting = it->second;
     if (meeting.state == MeetingState::kEnded) {
         return Status::InvalidArgument("Cannot join a meeting that has ended.");
     }
@@ -96,55 +105,61 @@ MeetingManager::StatusOrMeeting MeetingManager::JoinMeeting(const JoinMeetingCom
     }
 
     // 添加参与者
-    meeting.participants.push_back(command.participant_id);
+    auto status = repository_->AddParticipant(command.meeting_id, command.participant_id, false);
+    if (!status.IsOk()) {
+        return status;
+    }
     if (meeting.state == MeetingState::kScheduled && command.participant_id != meeting.organizer_id) {
         meeting.state = MeetingState::kRunning;
+        repository_->UpdateMeetingState(meeting.meeting_id, meeting.state, CurrentUnixSeconds());
     }
+    meeting.participants.push_back(command.participant_id);
     // 更新会议的更新时间戳
     Touch(meeting);
 
-    return StatusOrMeeting(meeting);
+    return StatusOrMeeting(std::move(meeting));
 }
 
 MeetingManager::Status MeetingManager::LeaveMeeting(const LeaveMeetingCommand& command) {
     if (command.meeting_id.empty()) {
         return Status::InvalidArgument("Meeting ID cannot be empty.");
     }
-    if (command.participant_id.empty()) {
+    if (command.participant_id == 0) {
         return Status::InvalidArgument("Participant ID cannot be empty.");
     }
 
-    std::unique_lock<std::shared_mutex> lock(mutex_);
-    auto it = meetings_.find(command.meeting_id);
-    if (it == meetings_.end()) {
-        return Status::NotFound("Meeting not found.");
+    // 获取会议信息
+    auto meeting_or = repository_->GetMeeting(command.meeting_id);
+    if (!meeting_or.IsOk()) {
+        return meeting_or.GetStatus();
     }
-
-    MeetingData& meeting = it->second;
-    auto exists = std::find(meeting.participants.begin(), meeting.participants.end()
-                            , command.participant_id);
-    if (exists == meeting.participants.end()) {
+    auto meeting = meeting_or.Value();
+    auto iter = std::find(meeting.participants.begin(), meeting.participants.end(), command.participant_id);
+    if (iter == meeting.participants.end()) {
         return Status::AlreadyExists("Participant not found in the meeting.");
-    }
-    if (meeting.state == MeetingState::kEnded) {
-        return Status::InvalidArgument("Cannot leave a meeting that has ended.");
-    }
-    if (meeting.participants.size() >= config_.max_participants) {
-        return Status::Unavailable("Meeting has reached maximum participant limit.");
     }
 
     // 移除参与者
-    meeting.participants.erase(exists);
-
-    if (config_.end_when_organizer_leaves && command.participant_id == meeting.organizer_id) {
-        meeting.state = MeetingState::kEnded;
-    } else if (config_.end_when_empty && meeting.participants.empty()) {
-        meeting.state = MeetingState::kEnded;
+    auto rm_status = repository_->RemoveParticipant(command.meeting_id, command.participant_id);
+    if (!rm_status.IsOk()) {
+        return rm_status;
     }
 
-    // 更新会议的更新时间戳
-    Touch(meeting);
-
+    if (command.participant_id == meeting.organizer_id && config_.end_when_organizer_leaves) {
+        // 组织者离开，结束会议
+        meeting.state = MeetingState::kEnded;
+        repository_->UpdateMeetingState(meeting.meeting_id, meeting.state, CurrentUnixSeconds());
+    } else {
+        // 非组织者离开，更新参与者列表
+        auto list = repository_->ListParticipants(meeting.meeting_id);
+        if (list.IsOk()) {
+            meeting.participants = list.Value();
+        }
+        if (meeting.participants.empty() && config_.end_when_empty) {
+            meeting.state = MeetingState::kEnded;
+            repository_->UpdateMeetingState(meeting.meeting_id, meeting.state, CurrentUnixSeconds());
+        }
+    }
     return Status::OK();
 }
 
@@ -152,17 +167,17 @@ MeetingManager::Status MeetingManager::EndMeeting(const EndMeetingCommand& comma
     if (command.meeting_id.empty()) {
         return Status::InvalidArgument("Meeting ID cannot be empty.");
     }
-    if (command.requester_id.empty()) {
+    if (command.requester_id == 0) {
         return Status::InvalidArgument("Requester ID cannot be empty.");
     }
 
-    std::unique_lock<std::shared_mutex> lock(mutex_);
-    auto it = meetings_.find(command.meeting_id);
-    if (it == meetings_.end()) {
-        return Status::NotFound("Meeting not found.");
+    // 获取会议信息
+    auto meeting_or = repository_->GetMeeting(command.meeting_id);
+    if (!meeting_or.IsOk()) {
+        return meeting_or.GetStatus();
     }
+    auto meeting = meeting_or.Value();
 
-    MeetingData& meeting = it->second;
     if (meeting.state == MeetingState::kEnded) {
         return Status::InvalidArgument("Meeting has already ended.");
     }
@@ -170,11 +185,8 @@ MeetingManager::Status MeetingManager::EndMeeting(const EndMeetingCommand& comma
         return Status::Unauthenticated("Only the organizer can end the meeting.");
     }
 
-    meeting.state = MeetingState::kEnded;
-    // 更新会议的更新时间戳
-    Touch(meeting);
-
-    return Status::OK();
+    // 更新会议状态为已结束
+    return repository_->UpdateMeetingState(command.meeting_id, MeetingState::kEnded, CurrentUnixSeconds());
 }
 
 MeetingManager::StatusOrMeeting MeetingManager::GetMeeting(const std::string& meeting_id) {
@@ -182,12 +194,11 @@ MeetingManager::StatusOrMeeting MeetingManager::GetMeeting(const std::string& me
         return Status::InvalidArgument("Meeting ID cannot be empty.");
     }
 
-    std::shared_lock<std::shared_mutex> lock(mutex_);
-    auto it = meetings_.find(meeting_id);
-    if (it == meetings_.end()) {
-        return Status::NotFound("Meeting not found.");
+    auto meeting = repository_->GetMeeting(meeting_id);
+    if (!meeting.IsOk()) {
+        return meeting.GetStatus();
     }
-    return StatusOrMeeting(it->second);
+    return meeting;
 }
 
 std::string MeetingManager::GenerateMeetingID() {

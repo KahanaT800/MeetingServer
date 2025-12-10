@@ -26,10 +26,6 @@ void ExecuteSQL(meeting::storage::ConnectionPool& pool, const std::string& sql) 
 class MysqlUserRepositoryTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        const char* enabled = std::getenv("MEETING_DB_TEST");
-        if (!enabled || std::string_view(enabled) != "1") {
-            GTEST_SKIP() << "MEETING_DB_TEST not set; skipping MySQL tests";
-        }
         meeting::storage::Options options;
         options.host = GetEnvOr("MEETING_DB_HOST", "127.0.0.1");
         options.port = static_cast<std::uint16_t>(std::stoi(GetEnvOr("MEETING_DB_PORT", "3306")));
@@ -75,6 +71,12 @@ TEST_F(MysqlUserRepositoryTest, CreateAndFetch) {
     auto data = MakeUser("alice");
     auto status = repo_->CreateUser(data);
     ASSERT_TRUE(status.IsOk()) << status.Message();
+
+    /*
+    // 暂停以便查看数据库
+    std::cout << "\n=== 数据已插入，按 Enter 继续测试... ===" << std::endl;
+    std::cin.get();
+    */
 
     auto fetched = repo_->FindByUserName("alice");
     ASSERT_TRUE(fetched.IsOk()) << fetched.GetStatus().Message();
