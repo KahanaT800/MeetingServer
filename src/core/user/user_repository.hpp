@@ -41,6 +41,7 @@ private:
     mutable std::shared_mutex mutex_;
     std::unordered_map<std::string, UserData> users_by_user_name_;
     std::unordered_map<std::string, UserData> users_by_id_;
+    std::uint64_t next_numeric_id_ = 1;
 };
 
 } // namespace core

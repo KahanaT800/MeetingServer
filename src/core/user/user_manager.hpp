@@ -4,6 +4,7 @@
 #include "common/status_or.hpp"
 #include "core/user/errors.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -27,6 +28,7 @@ struct LoginCommand {
 
 struct UserData {
   std::string user_id;
+  std::uint64_t numeric_id = 0; // 数据库自增ID
   std::string user_name;
   std::string display_name;
   std::string email;
@@ -60,4 +62,3 @@ private:
 
 }
 }
-

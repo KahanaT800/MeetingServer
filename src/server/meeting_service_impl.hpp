@@ -2,6 +2,7 @@
 
 #include "core/meeting/meeting_manager.hpp"
 #include "core/meeting/errors.hpp"
+#include "core/user/session_repository.hpp"
 #include "thread_pool/config.hpp"
 #include "thread_pool/thread_pool.hpp"
 #include "common/logger.hpp"
@@ -48,6 +49,7 @@ private:
 
 private:
     std::unique_ptr<meeting::core::MeetingManager> meeting_manager_;
+    std::shared_ptr<meeting::core::SessionRepository> session_repository_;
     thread_pool::ThreadPool thread_pool_;
 };
 

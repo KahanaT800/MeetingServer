@@ -67,6 +67,7 @@ add_library(storage_mysql STATIC
     storage/mysql/user_repository.cpp
     storage/mysql/transaction.cpp
     storage/mysql/meeting_repository.cpp
+    storage/mysql/session_repository.cpp
 )
 target_include_directories(storage_mysql
     PUBLIC
@@ -87,6 +88,7 @@ add_library(user_core STATIC
     core/user/user_manager.cpp
     core/user/session_manager.cpp
     core/user/user_repository.cpp
+    core/user/session_repository.cpp
 )
 target_include_directories(user_core
     PUBLIC
@@ -146,6 +148,7 @@ target_link_libraries(meeting_service
         meeting_common
         storage_mysql
         meeting_core
+        user_core
         meeting_proto
         thread_pool
         gRPC::grpc++
@@ -171,4 +174,3 @@ target_link_libraries(meeting_server
         thread_pool
         gRPC::grpc++
 )
-

@@ -93,14 +93,15 @@ meeting::common::StatusOr<meeting::core::UserData> MySQLUserRepository::QuerySin
     }
     // 构造用户数据对象
     meeting::core::UserData data;
-    data.user_id = row[0] ? row[0] : "";
-    data.user_name = row[1] ? row[1] : "";
-    data.display_name = row[2] ? row[2] : data.user_name;
-    data.email = row[3] ? row[3] : "";
-    data.password_hash = row[4] ? row[4] : "";
-    data.salt = row[5] ? row[5] : "";
-    data.created_at = ParseInt64(row[6]);
-    data.last_login = ParseInt64(row[7]);
+    data.numeric_id = ParseInt64(row[0]);
+    data.user_id = row[1] ? row[1] : "";
+    data.user_name = row[2] ? row[2] : "";
+    data.display_name = row[3] ? row[3] : data.user_name;
+    data.email = row[4] ? row[4] : "";
+    data.password_hash = row[5] ? row[5] : "";
+    data.salt = row[6] ? row[6] : "";
+    data.created_at = ParseInt64(row[7]);
+    data.last_login = ParseInt64(row[8]);
     return meeting::common::StatusOr<meeting::core::UserData>(data);
 }
 
@@ -113,7 +114,7 @@ meeting::common::StatusOr<meeting::core::UserData> MySQLUserRepository::FindByUs
     auto lease = std::move(lease_or.Value());
     MYSQL* conn = lease.Raw();
     auto sql = fmt::format(
-        "SELECT user_uuid, username, display_name, email, password_hash, salt, "
+        "SELECT id, user_uuid, username, display_name, email, password_hash, salt, "
         "UNIX_TIMESTAMP(created_at), IFNULL(UNIX_TIMESTAMP(last_login_at), 0) "
         "FROM users WHERE username = {} LIMIT 1",
         EscapeAndQuote(conn, user_name)
@@ -130,7 +131,7 @@ meeting::common::StatusOr<meeting::core::UserData> MySQLUserRepository::FindById
     auto lease = std::move(lease_or.Value());
     MYSQL* conn = lease.Raw();
     auto sql = fmt::format(
-        "SELECT user_uuid, username, display_name, email, password_hash, salt, "
+        "SELECT id, user_uuid, username, display_name, email, password_hash, salt, "
         "UNIX_TIMESTAMP(created_at), IFNULL(UNIX_TIMESTAMP(last_login_at), 0) "
         "FROM users WHERE user_uuid = {} LIMIT 1",
         EscapeAndQuote(conn, id)

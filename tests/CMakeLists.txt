@@ -129,6 +129,25 @@ set_target_properties(storage_meeting_test
 )
 add_test(NAME StorageMeetingTest COMMAND storage_meeting_test)
 
+# MySQL 流程存储单元测试
+add_executable(storage_flow_test
+    unit/mysql_flow_tests.cpp
+)
+target_link_libraries(storage_flow_test
+    PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        meeting_service
+        user_service
+        meeting_common
+        storage_mysql
+)
+set_target_properties(storage_flow_test
+    PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+add_test(NAME StorageFlowTest COMMAND storage_flow_test)
+
 # 设置测试输出目录
 set_target_properties(meeting_manager_test meeting_service_test
     PROPERTIES

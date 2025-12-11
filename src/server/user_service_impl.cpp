@@ -2,10 +2,13 @@
 #include "common/config_loader.hpp"
 #include "config_path.hpp"
 #include "core/user/user_repository.hpp"
+#include "core/user/session_repository.hpp"
 #include "storage/mysql/connection_pool.hpp"
 #include "storage/mysql/user_repository.hpp"
+#include "storage/mysql/session_repository.hpp"
 
 #include <chrono>
+#include <random>
 namespace meeting {
 namespace server {
 
@@ -51,13 +54,61 @@ std::shared_ptr<meeting::core::UserRepository> CreateUserRepository() {
     return std::make_shared<meeting::storage::MySQLUserRepository>(std::move(pool));
 }
 
+std::shared_ptr<meeting::core::SessionRepository> CreateSessionRepository() {
+    const auto& config = meeting::common::GlobalConfig();
+    if (!config.storage.mysql.enabled) {
+        return std::make_shared<meeting::core::InMemorySessionRepository>();
+    }
+
+    meeting::storage::Options options;
+    options.host = config.storage.mysql.host;
+    options.port = static_cast<std::uint16_t>(config.storage.mysql.port);
+    options.user = config.storage.mysql.user;
+    options.password = config.storage.mysql.password;
+    options.database = config.storage.mysql.database;
+    options.pool_size = static_cast<std::size_t>(config.storage.mysql.pool_size);
+    options.acquire_timeout = std::chrono::milliseconds(config.storage.mysql.connection_timeout_ms);
+    options.connect_timeout = std::chrono::milliseconds(config.storage.mysql.connection_timeout_ms);
+    options.read_timeout = std::chrono::milliseconds(config.storage.mysql.read_timeout_ms);
+    options.write_timeout = std::chrono::milliseconds(config.storage.mysql.write_timeout_ms);
+
+    auto pool = std::make_shared<meeting::storage::ConnectionPool>(options);
+    auto test_conn = pool->Acquire();
+    if (!test_conn.IsOk()) {
+        MEETING_LOG_ERROR("[UserService] Failed to initialize MySQL session connection: {}", test_conn.GetStatus().Message());
+        return std::make_shared<meeting::core::InMemorySessionRepository>();
+    }
+    return std::make_shared<meeting::storage::MySqlSessionRepository>(std::move(pool));
+}
+
+std::string GenerateToken() {
+    static thread_local std::mt19937_64 rng(std::random_device{}());
+    static constexpr char kChars[] =
+        "0123456789"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz";
+    std::uniform_int_distribution<int> dist(0, sizeof(kChars) - 2);
+    std::string token;
+    token.reserve(32);
+    for (int i = 0; i < 32; ++i) {
+        token.push_back(kChars[dist(rng)]);
+    }
+    return token;
+}
+
+std::int64_t NowSeconds() {
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
 } // namespace
 
 UserServiceImpl::UserServiceImpl(): UserServiceImpl(meeting::common::GetThreadPoolConfigPath()) {}
 
 UserServiceImpl::UserServiceImpl(const std::string& thread_pool_config_path)
     : user_manager_(std::make_unique<meeting::core::UserManager>(CreateUserRepository()))
-    , session_manager_(std::make_unique<meeting::core::SessionManager>())
+    , session_repository_(CreateSessionRepository())
     , thread_pool_(CreateUserThreadPool(thread_pool_config_path)) {
     // 启动线程池
     thread_pool_.Start();
@@ -137,17 +188,23 @@ grpc::Status UserServiceImpl::Login(grpc::ServerContext*
     auto user_data = status_or_user.Value();
     FillUserInfo(user_data, response->mutable_user());
 
-    auto session_future = thread_pool_.Submit([this, &user_data]() {
-        return session_manager_->CreateSession(user_data.user_id, /*client_ip=*/"", /*user_agent=*/"");
-    }); 
-    auto session_result = session_future.get();
-    if (!session_result.IsOk()) {
+    auto session_future = thread_pool_.Submit([this, user_data]() {
+        meeting::core::SessionRecord rec;
+        rec.token = GenerateToken();
+        rec.user_id = user_data.numeric_id;
+        rec.user_uuid = user_data.user_id;
+        rec.expires_at = NowSeconds() + 3600;
+        return rec;
+    });
+    auto rec = session_future.get();
+    auto session_status = session_repository_->CreateSession(rec);
+    if (!session_status.IsOk()) {
         meeting::core::UserErrorCode session_error = meeting::core::UserErrorCode::kSessionExpired;
-        meeting::core::ErrorToProto(session_error, session_result.GetStatus(), response->mutable_error());
-        return ToGrpcStatus(session_result.GetStatus());
+        meeting::core::ErrorToProto(session_error, session_status, response->mutable_error());
+        return ToGrpcStatus(session_status);
     }
 
-    response->set_session_token(session_result.Value().token);
+    response->set_session_token(rec.token);
     meeting::core::ErrorToProto(meeting::core::UserErrorCode::kOk, meeting::common::Status::OK(),
                                     response->mutable_error());
 
@@ -159,7 +216,7 @@ grpc::Status UserServiceImpl::Logout(grpc::ServerContext* /*context*/,
                                       proto::user::LogoutResponse* response) {
     MEETING_LOG_INFO("[UserService] Logout session_token={}...", request->session_token().substr(0, 6));                                    
     auto logout_future = thread_pool_.Submit([this, token = request->session_token()]() {
-        return session_manager_->DeleteSession(token);
+        return session_repository_->DeleteSession(token);
     });
 
     auto logout_status = logout_future.get();
@@ -175,7 +232,7 @@ grpc::Status UserServiceImpl::GetProfile(grpc::ServerContext* /*context*/,
                                           const proto::user::GetProfileRequest* request,
                                           proto::user::GetProfileResponse* response) {
     auto session_future = thread_pool_.Submit([this, token = request->session_token()]() {
-        return session_manager_->ValidateSession(token, /*client_ip=*/"", /*user_agent=*/"");
+        return session_repository_->ValidateSession(token);
     });
     auto session_status = session_future.get();
     if (!session_status.IsOk()) {
@@ -184,7 +241,7 @@ grpc::Status UserServiceImpl::GetProfile(grpc::ServerContext* /*context*/,
         return ToGrpcStatus(session_status.GetStatus());
     }
 
-    auto user_future = thread_pool_.Submit([this, user_id = session_status.Value().user_id]() {
+    auto user_future = thread_pool_.Submit([this, user_id = session_status.Value().user_uuid]() {
         return user_manager_->GetUserById(user_id);
     });
     auto user_status_or = user_future.get();

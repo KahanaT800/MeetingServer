@@ -34,4 +34,9 @@ export MEETING_DB_USER="${MEETING_DB_USER:-dev}"
 export MEETING_DB_PASSWORD="${MEETING_DB_PASSWORD:-devpassed}"
 ./tests/storage_meeting_test
 
+echo "运行 MySQL 流测试..."
+export MEETING_DB_USER="${MEETING_DB_USER:-dev}"
+export MEETING_DB_PASSWORD="${MEETING_DB_PASSWORD:-devpassed}"
+./tests/storage_flow_test
+
 echo "所有测试完成！"

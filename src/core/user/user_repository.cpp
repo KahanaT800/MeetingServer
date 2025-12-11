@@ -11,8 +11,12 @@ meeting::common::Status InMemoryUserRepository::CreateUser(const UserData& data)
     if (users_by_user_name_.count(data.user_name) > 0) {
         return meeting::common::Status::AlreadyExists("User name already exists.");
     }
-    users_by_user_name_[data.user_name] = data;
-    users_by_id_[data.user_id] = data;
+    UserData stored = data;
+    if (stored.numeric_id == 0) {
+        stored.numeric_id = next_numeric_id_++;
+    }
+    users_by_user_name_[stored.user_name] = stored;
+    users_by_id_[stored.user_id] = stored;
     return meeting::common::Status::OK();
 }
 
