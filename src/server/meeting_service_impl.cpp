@@ -1,21 +1,83 @@
 #include "server/meeting_service_impl.hpp"
+#include "common/config_loader.hpp"
 #include "config_path.hpp"
+#include "core/meeting/meeting_repository.hpp"
+#include "core/user/session_repository.hpp"
+#include "common/status_or.hpp"
+#include "storage/mysql/connection_pool.hpp"
+#include "storage/mysql/meeting_repository.hpp"
+#include "storage/mysql/session_repository.hpp"
+
+#include <charconv>
+#include <chrono>
+#include <system_error>
 namespace meeting {
 namespace server {
 
 namespace {
 
-thread_pool::ThreadPool CreateThreadPool() {
-    // 初始化线程池日志器
-    thread_pool::log::InitFromFile(meeting::common::GetLoggerConfigPath());
-    // 加载线程池配置
-    auto loader = thread_pool::ThreadPoolConfigLoader::FromFile(
-        meeting::common::GetThreadPoolConfigPath());
+thread_pool::ThreadPool CreateThreadPool(const std::string& config_path) {
+    auto loader = thread_pool::ThreadPoolConfigLoader::FromFile(config_path);
     if (loader.has_value()) {
         return thread_pool::ThreadPool(loader->GetConfig());
     }
-    // 配置文件加载失败，使用默认参数
     return thread_pool::ThreadPool(4, 1024);
+}
+
+// 根据配置创建会议存储库
+std::shared_ptr<meeting::core::MeetingRepository> CreateMeetingRepository() {
+    const auto& config = meeting::common::GlobalConfig();
+    if (!config.storage.mysql.enabled) {
+        MEETING_LOG_WARN("[MeetingService] MySQL backend disabled; using in-memory repository");
+        return std::make_shared<meeting::core::InMemoryMeetingRepository>();
+    }
+
+    meeting::storage::Options options;
+    options.host = config.storage.mysql.host;
+    options.port = static_cast<std::uint16_t>(config.storage.mysql.port);
+    options.user = config.storage.mysql.user;
+    options.password = config.storage.mysql.password;
+    options.database = config.storage.mysql.database;
+    options.pool_size = static_cast<std::size_t>(config.storage.mysql.pool_size);
+    options.acquire_timeout = std::chrono::milliseconds(config.storage.mysql.connection_timeout_ms);
+    options.connect_timeout = std::chrono::milliseconds(config.storage.mysql.connection_timeout_ms);
+    options.read_timeout = std::chrono::milliseconds(config.storage.mysql.read_timeout_ms);
+    options.write_timeout = std::chrono::milliseconds(config.storage.mysql.write_timeout_ms);
+
+    auto pool = std::make_shared<meeting::storage::ConnectionPool>(options);
+    auto test_conn = pool->Acquire();
+    if (!test_conn.IsOk()) {
+        MEETING_LOG_ERROR("[MeetingService] Failed to initialize MySQL connection: {}", test_conn.GetStatus().Message());
+        return std::make_shared<meeting::core::InMemoryMeetingRepository>();
+    }
+    return std::make_shared<meeting::storage::MySqlMeetingRepository>(std::move(pool));
+}
+
+std::shared_ptr<meeting::core::SessionRepository> CreateSessionRepository() {
+    const auto& config = meeting::common::GlobalConfig();
+    if (!config.storage.mysql.enabled) {
+        return std::make_shared<meeting::core::InMemorySessionRepository>();
+    }
+
+    meeting::storage::Options options;
+    options.host = config.storage.mysql.host;
+    options.port = static_cast<std::uint16_t>(config.storage.mysql.port);
+    options.user = config.storage.mysql.user;
+    options.password = config.storage.mysql.password;
+    options.database = config.storage.mysql.database;
+    options.pool_size = static_cast<std::size_t>(config.storage.mysql.pool_size);
+    options.acquire_timeout = std::chrono::milliseconds(config.storage.mysql.connection_timeout_ms);
+    options.connect_timeout = std::chrono::milliseconds(config.storage.mysql.connection_timeout_ms);
+    options.read_timeout = std::chrono::milliseconds(config.storage.mysql.read_timeout_ms);
+    options.write_timeout = std::chrono::milliseconds(config.storage.mysql.write_timeout_ms);
+
+    auto pool = std::make_shared<meeting::storage::ConnectionPool>(options);
+    auto test_conn = pool->Acquire();
+    if (!test_conn.IsOk()) {
+        MEETING_LOG_ERROR("[MeetingService] Failed to initialize MySQL session connection: {}", test_conn.GetStatus().Message());
+        return std::make_shared<meeting::core::InMemorySessionRepository>();
+    }
+    return std::make_shared<meeting::storage::MySqlSessionRepository>(std::move(pool));
 }
 
 // 状态码映射
@@ -37,13 +99,46 @@ meeting::core::MeetingErrorCode MapStatus(const meeting::common::Status& status)
     }
 }
 
+meeting::common::StatusOr<std::uint64_t> ResolveUserId(const std::string& token,
+                                                       meeting::core::SessionRepository* repo,
+                                                       bool allow_numeric_fallback) {
+    if (repo) {
+        auto session = repo->ValidateSession(token);
+        if (session.IsOk()) {
+            return meeting::common::StatusOr<std::uint64_t>(session.Value().user_id);
+        }
+        if (!allow_numeric_fallback) {
+            return session.GetStatus();
+        }
+    }
+    if (!allow_numeric_fallback) {
+        return meeting::common::Status::Unauthenticated("Session not found");
+    }
+    // fallback: interpret token as numeric id
+    if (token.empty()) {
+        return meeting::common::Status::InvalidArgument("session token is empty");
+    }
+    std::uint64_t value = 0;
+    auto first = token.data();
+    auto last = token.data() + token.size();
+    auto [ptr, ec] = std::from_chars(first, last, value);
+    if (ec != std::errc() || ptr != last) {
+        return meeting::common::Status::InvalidArgument("session token must be numeric user id");
+    }
+    return meeting::common::StatusOr<std::uint64_t>(value);
+}
+
 } // namespace
 
-MeetingServiceImpl::MeetingServiceImpl()
-    : meeting_manager_(std::make_unique<meeting::core::MeetingManager>())
-    , thread_pool_(CreateThreadPool()) {
+MeetingServiceImpl::MeetingServiceImpl(): MeetingServiceImpl(meeting::common::GetThreadPoolConfigPath()) {}
+
+MeetingServiceImpl::MeetingServiceImpl(const std::string& thread_pool_config_path)
+    : meeting_manager_(std::make_unique<meeting::core::MeetingManager>(meeting::core::MeetingConfig{}, CreateMeetingRepository()))
+    , session_repository_(CreateSessionRepository())
+    , thread_pool_(CreateThreadPool(thread_pool_config_path)) {
     thread_pool_.Start();
 }
+
 
 MeetingServiceImpl::~MeetingServiceImpl() {
     thread_pool_.Stop();
@@ -52,7 +147,16 @@ MeetingServiceImpl::~MeetingServiceImpl() {
 grpc::Status MeetingServiceImpl::CreateMeeting(grpc::ServerContext*
                                                 , const proto::meeting::CreateMeetingRequest* request
                                                 , proto::meeting::CreateMeetingResponse* response) {
-    meeting::core::CreateMeetingCommand command{request->session_token(), request->topic()};
+    auto organizer_id_or = ResolveUserId(request->session_token(), session_repository_.get(),
+                                         !meeting::common::GlobalConfig().storage.mysql.enabled);
+    if (!organizer_id_or.IsOk()) {
+        auto code = MapStatus(organizer_id_or.GetStatus());
+        meeting::core::ErrorToProto(code, organizer_id_or.GetStatus(), response->mutable_error());
+        return ToGrpcStatus(organizer_id_or.GetStatus());
+    }
+    meeting::core::CreateMeetingCommand command{organizer_id_or.Value(), request->topic()};
+    MEETING_LOG_INFO("[MeetingService] CreateMeeting topic={} organizer={}",
+                     command.topic, command.organizer_id);
     auto create_future = thread_pool_.Submit([this, command]() {
         return meeting_manager_->CreateMeeting(command);
     });
@@ -73,7 +177,16 @@ grpc::Status MeetingServiceImpl::CreateMeeting(grpc::ServerContext*
 grpc::Status MeetingServiceImpl::JoinMeeting(grpc::ServerContext*
                                               , const proto::meeting::JoinMeetingRequest* request
                                               , proto::meeting::JoinMeetingResponse* response) {
-    meeting::core::JoinMeetingCommand command{request->meeting_id(), request->session_token()};
+    auto participant_or = ResolveUserId(request->session_token(), session_repository_.get(),
+                                        !meeting::common::GlobalConfig().storage.mysql.enabled);
+    if (!participant_or.IsOk()) {
+        auto code = MapStatus(participant_or.GetStatus());
+        meeting::core::ErrorToProto(code, participant_or.GetStatus(), response->mutable_error());
+        return ToGrpcStatus(participant_or.GetStatus());
+    }
+    meeting::core::JoinMeetingCommand command{request->meeting_id(), participant_or.Value()};
+    MEETING_LOG_INFO("[MeetingService] JoinMeeting meeting={} participant={}",
+                     command.meeting_id, command.participant_id);
     auto join_future = thread_pool_.Submit([this, command]() {
         return meeting_manager_->JoinMeeting(command);
     });
@@ -98,7 +211,16 @@ grpc::Status MeetingServiceImpl::JoinMeeting(grpc::ServerContext*
 grpc::Status MeetingServiceImpl::LeaveMeeting(grpc::ServerContext*
                                               , const proto::meeting::LeaveMeetingRequest* request
                                               , proto::meeting::LeaveMeetingResponse* response) {
-    meeting::core::LeaveMeetingCommand command{request->meeting_id(), request->session_token()};
+    auto participant_or = ResolveUserId(request->session_token(), session_repository_.get(),
+                                        !meeting::common::GlobalConfig().storage.mysql.enabled);
+    if (!participant_or.IsOk()) {
+        auto code = MapStatus(participant_or.GetStatus());
+        meeting::core::ErrorToProto(code, participant_or.GetStatus(), response->mutable_error());
+        return ToGrpcStatus(participant_or.GetStatus());
+    }
+    meeting::core::LeaveMeetingCommand command{request->meeting_id(), participant_or.Value()};
+    MEETING_LOG_INFO("[MeetingService] LeaveMeeting meeting={} participant={}",
+                     command.meeting_id, command.participant_id);
     auto leave_future = thread_pool_.Submit([this, command]() {
         return meeting_manager_->LeaveMeeting(command);
     });
@@ -117,7 +239,16 @@ grpc::Status MeetingServiceImpl::LeaveMeeting(grpc::ServerContext*
 grpc::Status MeetingServiceImpl::EndMeeting(grpc::ServerContext*
                                              , const proto::meeting::EndMeetingRequest* request
                                              , proto::meeting::EndMeetingResponse* response) {
-    meeting::core::EndMeetingCommand command{request->meeting_id(), request->session_token()};
+    auto requester_or = ResolveUserId(request->session_token(), session_repository_.get(),
+                                      !meeting::common::GlobalConfig().storage.mysql.enabled);
+    if (!requester_or.IsOk()) {
+        auto code = MapStatus(requester_or.GetStatus());
+        meeting::core::ErrorToProto(code, requester_or.GetStatus(), response->mutable_error());
+        return ToGrpcStatus(requester_or.GetStatus());
+    }
+    meeting::core::EndMeetingCommand command{request->meeting_id(), requester_or.Value()};
+    MEETING_LOG_INFO("[MeetingService] EndMeeting meeting={} requester={}",
+                     command.meeting_id, command.requester_id);
     auto end_future = thread_pool_.Submit([this, command]() {
         return meeting_manager_->EndMeeting(command);
     });
@@ -139,6 +270,7 @@ grpc::Status MeetingServiceImpl::GetMeeting(grpc::ServerContext*
     auto get_future = thread_pool_.Submit([this, id = request->meeting_id()]() {
         return meeting_manager_->GetMeeting(id);
     });
+    MEETING_LOG_INFO("[MeetingService] GetMeeting meeting={}", request->meeting_id());
     auto status_or_meeting = get_future.get();
     if (!status_or_meeting.IsOk()) {
         auto code = MapStatus(status_or_meeting.GetStatus());
@@ -193,7 +325,7 @@ void MeetingServiceImpl::FillMeetingInfo(const meeting::core::MeetingData& data
         return;
     }
     info->set_meeting_id(data.meeting_id);
-    info->set_organizer_id(data.organizer_id);
+    info->set_organizer_id(std::to_string(data.organizer_id));
     info->set_topic(data.topic);
     info->set_state(StateToString(data.state));
     info->mutable_start_time()->set_seconds(data.created_at);
@@ -201,8 +333,8 @@ void MeetingServiceImpl::FillMeetingInfo(const meeting::core::MeetingData& data
     info->mutable_end_time()->set_seconds(data.updated_at);
     info->mutable_end_time()->set_nanos(0);
     info->clear_participant_ids();
-    for (const auto& participant : data.participants) {
-        info->add_participant_ids(participant);
+    for (const auto participant : data.participants) {
+        info->add_participant_ids(std::to_string(participant));
     }
 }
 

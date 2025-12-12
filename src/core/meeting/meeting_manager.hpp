@@ -4,9 +4,9 @@
 #include "common/status_or.hpp"
 
 #include <chrono>
-#include <shared_mutex>
+#include <cstdint>
+#include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace meeting {
@@ -21,10 +21,10 @@ enum class MeetingState {
 struct MeetingData {
     std::string              meeting_id;    // 会议ID
     std::string              meeting_code;  // 会议码
-    std::string              organizer_id;  // 组织者用户ID
+    std::uint64_t            organizer_id = 0;  // 组织者用户ID
     std::string              topic;         // 会议主题
     MeetingState             state;         // 会议状态
-    std::vector<std::string> participants;  // 参与者用户ID列表
+    std::vector<std::uint64_t> participants;  // 参与者用户ID列表
     std::int64_t             created_at;    // 会议创建时间
     std::int64_t             updated_at;    // 会议更新时间
 };
@@ -37,23 +37,23 @@ struct MeetingConfig {
 };
 
 struct CreateMeetingCommand {
-    std::string organizer_id;  // 组织者用户ID
+    std::uint64_t organizer_id{0};  // 组织者用户ID
     std::string topic;         // 会议主题
 };
 
 struct JoinMeetingCommand {
     std::string meeting_id;    // 会议ID
-    std::string participant_id; // 参与者用户ID
+    std::uint64_t participant_id{0}; // 参与者用户ID
 };
 
 struct LeaveMeetingCommand {
     std::string meeting_id;     // 会议ID
-    std::string participant_id; // 参与者用户ID
+    std::uint64_t participant_id{0}; // 参与者用户ID
 };
 
 struct EndMeetingCommand {
     std::string meeting_id;    // 会议ID
-    std::string requester_id;  // 请求者用户ID
+    std::uint64_t requester_id{0};  // 请求者用户ID
 };
 
 class MeetingManager {
@@ -61,7 +61,7 @@ public:
     using Status = meeting::common::Status;
     using StatusOrMeeting = meeting::common::StatusOr<MeetingData>;
 
-    explicit MeetingManager(MeetingConfig config = MeetingConfig{});
+    explicit MeetingManager(MeetingConfig config = MeetingConfig{}, std::shared_ptr<class MeetingRepository> repository = nullptr);
 
     StatusOrMeeting CreateMeeting(const CreateMeetingCommand& command);
     StatusOrMeeting JoinMeeting(const JoinMeetingCommand& command);
@@ -76,9 +76,7 @@ private:
     void Touch(MeetingData& meeting); // 更新会议的更新时间戳
 private:
     MeetingConfig config_;
-    mutable std::shared_mutex mutex_;
-    std::unordered_map<std::string, MeetingData> meetings_; // meeting_id -> MeetingData
-    std::unordered_map<std::string, std::string> code_index_; // meeting_code -> meeting_id
+    std::shared_ptr<class MeetingRepository> repository_;
 };
 
 }

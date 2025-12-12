@@ -14,6 +14,26 @@ include_directories(
 
 # 测试单元
 
+# 配置与日志测试
+add_executable(config_logger_test
+    unit/config_logger_test.cpp
+)
+
+target_link_libraries(config_logger_test
+    PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        meeting_common
+        thread_pool
+)
+
+add_test(NAME ConfigLoggerTest COMMAND config_logger_test)
+
+set_target_properties(config_logger_test
+    PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+
 # 用户管理器单元测试
 add_executable(user_manager_test
     unit/user_manager_test.cpp
@@ -74,6 +94,59 @@ target_link_libraries(meeting_service_test
         thread_pool
 )
 add_test(NAME MeetingServiceTest COMMAND meeting_service_test)
+
+# MySQL 存储单元测试
+add_executable(storage_user_test
+    unit/mysql_user_test.cpp
+)
+target_link_libraries(storage_user_test    
+    PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        storage_mysql
+        user_core
+)
+set_target_properties(storage_user_test
+    PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+add_test(NAME StorageUserTest COMMAND storage_user_test)
+
+# MySQL 会议存储单元测试
+add_executable(storage_meeting_test
+    unit/mysql_meeting_tests.cpp
+)
+target_link_libraries(storage_meeting_test
+    PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        storage_mysql
+        meeting_core
+)
+set_target_properties(storage_meeting_test
+    PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+add_test(NAME StorageMeetingTest COMMAND storage_meeting_test)
+
+# MySQL 流程存储单元测试
+add_executable(storage_flow_test
+    unit/mysql_flow_tests.cpp
+)
+target_link_libraries(storage_flow_test
+    PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        meeting_service
+        user_service
+        meeting_common
+        storage_mysql
+)
+set_target_properties(storage_flow_test
+    PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+add_test(NAME StorageFlowTest COMMAND storage_flow_test)
 
 # 设置测试输出目录
 set_target_properties(meeting_manager_test meeting_service_test

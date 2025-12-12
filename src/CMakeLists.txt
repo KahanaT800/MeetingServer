@@ -26,6 +26,22 @@ target_link_libraries(meeting_proto
         protobuf::libprotobuf
 )
 
+# 配置和日志公共库
+add_library(meeting_common STATIC
+    common/config_loader.cpp
+    common/logger.cpp
+)
+target_include_directories(meeting_common
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_BINARY_DIR}/src
+)
+target_link_libraries(meeting_common
+    PUBLIC
+        nlohmann_json::nlohmann_json
+        spdlog::spdlog
+)
+
 # 线程池库
 add_library(thread_pool STATIC
     thread_pool/src/thread_pool.cpp
@@ -44,10 +60,35 @@ target_link_libraries(thread_pool
         nlohmann_json::nlohmann_json
 )
 
+# Storage MySQL库
+add_library(storage_mysql STATIC
+    storage/mysql/connection.cpp
+    storage/mysql/connection_pool.cpp
+    storage/mysql/user_repository.cpp
+    storage/mysql/transaction.cpp
+    storage/mysql/meeting_repository.cpp
+    storage/mysql/session_repository.cpp
+)
+target_include_directories(storage_mysql
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_BINARY_DIR}/src
+)
+target_link_libraries(storage_mysql
+    PUBLIC
+        meeting_common
+        user_core
+        meeting_core
+        fmt::fmt
+        mysqlclient
+)
+
 # 用户核心库 (业务逻辑)
 add_library(user_core STATIC
     core/user/user_manager.cpp
     core/user/session_manager.cpp
+    core/user/user_repository.cpp
+    core/user/session_repository.cpp
 )
 target_include_directories(user_core
     PUBLIC
@@ -72,6 +113,8 @@ target_include_directories(user_service
 )
 target_link_libraries(user_service
     PUBLIC
+        meeting_common
+        storage_mysql
         user_core
         thread_pool
         meeting_proto
@@ -81,6 +124,7 @@ target_link_libraries(user_service
 # 会议核心库 (业务逻辑)
 add_library(meeting_core STATIC
     core/meeting/meeting_manager.cpp
+    core/meeting/meeting_repository.cpp
 )
 target_include_directories(meeting_core
     PUBLIC
@@ -101,9 +145,32 @@ target_include_directories(meeting_service
 )
 target_link_libraries(meeting_service
     PUBLIC
+        meeting_common
+        storage_mysql
         meeting_core
+        user_core
         meeting_proto
         thread_pool
         gRPC::grpc++
 )
 
+
+
+# meeting_server executable
+add_executable(meeting_server
+    server/main.cpp
+)
+target_include_directories(meeting_server
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_BINARY_DIR}/src
+)
+target_link_libraries(meeting_server
+    PRIVATE
+        meeting_service
+        meeting_common
+        user_service
+        meeting_proto
+        thread_pool
+        gRPC::grpc++
+)

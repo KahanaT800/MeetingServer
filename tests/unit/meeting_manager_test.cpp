@@ -15,7 +15,7 @@ protected:
 };
 
 TEST_F(MeetingManagerTest, CreateAndGetMeeting) {
-    CreateMeetingCommand command{"organizer-1", "Daily Standup"};
+    CreateMeetingCommand command{1001, "Daily Standup"};
     auto created = manager_->CreateMeeting(command);
     ASSERT_TRUE(created.IsOk());
 
@@ -23,51 +23,51 @@ TEST_F(MeetingManagerTest, CreateAndGetMeeting) {
     ASSERT_TRUE(fetched.IsOk());
 
     EXPECT_EQ(fetched.Value().topic, "Daily Standup");
-    EXPECT_EQ(fetched.Value().organizer_id, "organizer-1");
+    EXPECT_EQ(fetched.Value().organizer_id, 1001u);
     EXPECT_EQ(fetched.Value().state, MeetingState::kScheduled);
 }
 
 TEST_F(MeetingManagerTest, JoinMeetingSuccess) {
-    CreateMeetingCommand create_cmd{"organizer-1", "Daily Standup"};
+    CreateMeetingCommand create_cmd{1001, "Daily Standup"};
     auto created = manager_->CreateMeeting(create_cmd);
     ASSERT_TRUE(created.IsOk());
 
-    JoinMeetingCommand join_cmd{created.Value().meeting_id, "participant-1"};
+    JoinMeetingCommand join_cmd{created.Value().meeting_id, 2001};
     auto join_result = manager_->JoinMeeting(join_cmd);
     ASSERT_TRUE(join_result.IsOk());
 
     auto fetched = manager_->GetMeeting(created.Value().meeting_id);
     ASSERT_TRUE(fetched.IsOk());
     EXPECT_EQ(fetched.Value().participants.size(), 2u);
-    EXPECT_EQ(fetched.Value().participants[0], "organizer-1");
-    EXPECT_EQ(fetched.Value().participants[1], "participant-1");
+    EXPECT_EQ(fetched.Value().participants[0], 1001u);
+    EXPECT_EQ(fetched.Value().participants[1], 2001u);
 }
 
 TEST_F(MeetingManagerTest, LeaveMeetingSuccess) {
-    CreateMeetingCommand create_cmd{"organizer-1", "Daily Standup"};
+    CreateMeetingCommand create_cmd{1001, "Daily Standup"};
     auto created = manager_->CreateMeeting(create_cmd);
     ASSERT_TRUE(created.IsOk());
 
-    JoinMeetingCommand join_cmd{created.Value().meeting_id, "participant-1"};
+    JoinMeetingCommand join_cmd{created.Value().meeting_id, 2001};
     auto join_result = manager_->JoinMeeting(join_cmd);
     ASSERT_TRUE(join_result.IsOk());
 
-    LeaveMeetingCommand leave_cmd{created.Value().meeting_id, "participant-1"};
+    LeaveMeetingCommand leave_cmd{created.Value().meeting_id, 2001};
     auto leave_result = manager_->LeaveMeeting(leave_cmd);
     ASSERT_TRUE(leave_result.IsOk());
 
     auto fetched = manager_->GetMeeting(created.Value().meeting_id);
     ASSERT_TRUE(fetched.IsOk());
     EXPECT_EQ(fetched.Value().participants.size(), 1u);
-    EXPECT_EQ(fetched.Value().participants[0], "organizer-1");
+    EXPECT_EQ(fetched.Value().participants[0], 1001u);
 }
 
 TEST_F(MeetingManagerTest, EndMeetingByOrganizer) {
-    CreateMeetingCommand create_cmd{"organizer-1", "Daily Standup"};
+    CreateMeetingCommand create_cmd{1001, "Daily Standup"};
     auto created = manager_->CreateMeeting(create_cmd);
     ASSERT_TRUE(created.IsOk());
 
-    EndMeetingCommand end_cmd{created.Value().meeting_id, "organizer-1"};
+    EndMeetingCommand end_cmd{created.Value().meeting_id, 1001};
     auto end_result = manager_->EndMeeting(end_cmd);
     ASSERT_TRUE(end_result.IsOk());
 
@@ -77,11 +77,11 @@ TEST_F(MeetingManagerTest, EndMeetingByOrganizer) {
 }
 
 TEST_F(MeetingManagerTest, EndMeetingByNonOrganizerFails) {
-    CreateMeetingCommand create_cmd{"organizer-1", "Daily Standup"};
+    CreateMeetingCommand create_cmd{1001, "Daily Standup"};
     auto created = manager_->CreateMeeting(create_cmd);
     ASSERT_TRUE(created.IsOk());
 
-    EndMeetingCommand end_cmd{created.Value().meeting_id, "participant-1"};
+    EndMeetingCommand end_cmd{created.Value().meeting_id, 2001};
     auto end_result = manager_->EndMeeting(end_cmd);
     EXPECT_FALSE(end_result.IsOk());
     EXPECT_EQ(end_result.Code(), StatusCode::kUnauthenticated);
@@ -92,15 +92,15 @@ TEST_F(MeetingManagerTest, EndMeetingByNonOrganizerFails) {
 }
 
 TEST_F(MeetingManagerTest, JoinFailsWhenMeetingEnded) {
-    CreateMeetingCommand create_cmd{"organizer-1", "Daily Standup"};
+    CreateMeetingCommand create_cmd{1001, "Daily Standup"};
     auto created = manager_->CreateMeeting(create_cmd);
     ASSERT_TRUE(created.IsOk());
 
-    EndMeetingCommand end_cmd{created.Value().meeting_id, "organizer-1"};
+    EndMeetingCommand end_cmd{created.Value().meeting_id, 1001};
     auto end_result = manager_->EndMeeting(end_cmd);
     ASSERT_TRUE(end_result.IsOk());
 
-    JoinMeetingCommand join_cmd{created.Value().meeting_id, "participant-1"};
+    JoinMeetingCommand join_cmd{created.Value().meeting_id, 2001};
     auto join_result = manager_->JoinMeeting(join_cmd);
     EXPECT_FALSE(join_result.IsOk());
     EXPECT_EQ(join_result.GetStatus().Code(), StatusCode::kInvalidArgument);

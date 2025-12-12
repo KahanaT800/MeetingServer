@@ -1,5 +1,6 @@
 #include "core/user/user_manager.hpp"
 #include "core/user/errors.hpp"
+#include "core/user/user_repository.hpp"
 
 #include <chrono>
 #include <random>
@@ -36,6 +37,15 @@ std::string RandomHexString(std::size_t length) {
 
 } // namespace
 
+// 构造函数
+UserManager::UserManager(std::shared_ptr<UserRepository> repository)
+    : repository_(std::move(repository)) {
+    // 如果没有提供存储库，则使用内存存储库
+    if (!repository_) {
+        repository_ = std::make_shared<InMemoryUserRepository>();
+    }
+}
+
 // 注册新用户
 UserManager::Status UserManager::RegisterUser(const RegisterCommand& command) {
     if (command.user_name.empty() || command.password.empty() || command.email.empty()) {
@@ -57,56 +67,29 @@ UserManager::Status UserManager::RegisterUser(const RegisterCommand& command) {
     user_data.created_at = CurrentUnixSeconds();
     user_data.last_login = 0;
 
-    std::unique_lock<std::shared_mutex> lock(mutex_);
-    
-    // 检查用户名是否已存在
-    if (users_by_user_name_.find(command.user_name) != users_by_user_name_.end()) {
-        return Status::AlreadyExists("User name already exists.");
-    }
-
-    // 存储用户数据
-    users_by_user_name_.emplace(user_data.user_name, user_data);
-    users_by_id_.emplace(user_data.user_id, user_data);
-
-    return Status::OK();
+    return repository_->CreateUser(user_data);
 }
 
 // 用户登录
 UserManager::StatusOrUser UserManager::LoginUser(const LoginCommand& command) {
-    UserData user_data;
-    
-    // 读取和验证
-    {
-        std::shared_lock<std::shared_mutex> read_lock(mutex_);
-        auto it = users_by_user_name_.find(command.user_name);
-        if (it == users_by_user_name_.end()) {
-            return Status::NotFound("User not found.");
-        }
-
-        user_data = it->second;
-        const std::string hashed_password = HashPassword(command.password, user_data.salt);
-        if (hashed_password != user_data.password_hash) {
-            return Status::Unauthenticated("Invalid password.");
-        }
+    // 查找用户
+    auto user_result = repository_->FindByUserName(command.user_name);
+    if (!user_result.IsOk()) {
+        return user_result.GetStatus();
     }
 
-    // 更新数据
-    const std::int64_t current_time = CurrentUnixSeconds();
-    {
-        std::unique_lock<std::shared_mutex> write_lock(mutex_);
-        
-        // 重新检查用户是否仍然存在
-        auto it = users_by_user_name_.find(user_data.user_name);
-        if (it == users_by_user_name_.end()) {
-            return Status::NotFound("User not found.");
-        }
-        
-        // 更新 last_login
-        users_by_user_name_[user_data.user_name].last_login = current_time;
-        users_by_id_[user_data.user_id].last_login = current_time;
-        
-        // 更新返回的用户数据
-        user_data.last_login = current_time;
+    // 验证密码
+    auto user_data = std::move(user_result.Value());
+    const std::string hashed_password = HashPassword(command.password, user_data.salt);
+    if (hashed_password != user_data.password_hash) {
+        return Status::Unauthenticated("Invalid user name or password.");
+    }
+
+    // 更新最后登录时间
+    const std::int64_t now = CurrentUnixSeconds();
+    auto update_status = repository_->UpdateLastLogin(user_data.user_id, now);
+    if (update_status.IsOk()) {
+        user_data.last_login = now;
     }
 
     return StatusOrUser(std::move(user_data));
@@ -114,32 +97,21 @@ UserManager::StatusOrUser UserManager::LoginUser(const LoginCommand& command) {
 
 // 用户登出
 UserManager::Status UserManager::LogoutUser(const std::string& user_name) {
-    std::shared_lock<std::shared_mutex> lock(mutex_);
-    auto it = users_by_user_name_.find(user_name);
-    if (it == users_by_user_name_.end()) {
-        return Status::NotFound("User not found.");
+    auto user_result = repository_->FindByUserName(user_name);
+    if (!user_result.IsOk()) {
+        return user_result.GetStatus();
     }
     return Status::OK();
 }
 
 // 根据用户名获取用户信息
 UserManager::StatusOrUser UserManager::GetUserByUserName(const std::string& user_name) const {
-    std::shared_lock<std::shared_mutex> lock(mutex_);
-    auto it = users_by_user_name_.find(user_name);
-    if (it == users_by_user_name_.end()) {
-        return Status::NotFound("User not found.");
-    }
-    return StatusOrUser(it->second);
+    return repository_->FindByUserName(user_name);
 }
 
 // 根据用户ID获取用户信息
 UserManager::StatusOrUser UserManager::GetUserById(const std::string& user_id) const {
-    std::shared_lock<std::shared_mutex> lock(mutex_);
-    auto it = users_by_id_.find(user_id);
-    if (it == users_by_id_.end()) {
-        return Status::NotFound("User not found.");
-    }
-    return StatusOrUser(it->second);
+    return repository_->FindById(user_id);
 }
 
 // 生成唯一的用户ID

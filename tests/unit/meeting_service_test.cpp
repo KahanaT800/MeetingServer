@@ -17,7 +17,7 @@ protected:
 
 TEST_F(MeetingServiceTest, CreateMeetingSuccess) {
     proto::meeting::CreateMeetingRequest request;
-    request.set_session_token("organizer-1");
+    request.set_session_token("1001");
     request.set_topic("Daily Standup");
     proto::meeting::CreateMeetingResponse response;
     auto status = service_->CreateMeeting(&context_, &request, &response);
@@ -30,7 +30,7 @@ TEST_F(MeetingServiceTest, CreateMeetingSuccess) {
 TEST_F(MeetingServiceTest, JoinLeaveAndEndFlow) {
     // Create Meeting
     proto::meeting::CreateMeetingRequest create_request;
-    create_request.set_session_token("organizer-1");
+    create_request.set_session_token("1001");
     create_request.set_topic("Daily Standup");
     proto::meeting::CreateMeetingResponse create_response;
     auto create_status = service_->CreateMeeting(&context_, &create_request, &create_response);
@@ -41,7 +41,7 @@ TEST_F(MeetingServiceTest, JoinLeaveAndEndFlow) {
     // Join Meeting
     proto::meeting::JoinMeetingRequest join_request;
     join_request.set_meeting_id(meeting_id);
-    join_request.set_session_token("participant-1");
+    join_request.set_session_token("2001");
     proto::meeting::JoinMeetingResponse join_response;
     auto join_status = service_->JoinMeeting(&context_, &join_request, &join_response);
     ASSERT_TRUE(join_status.ok());
@@ -50,7 +50,7 @@ TEST_F(MeetingServiceTest, JoinLeaveAndEndFlow) {
     // Leave Meeting
     proto::meeting::LeaveMeetingRequest leave_request;
     leave_request.set_meeting_id(meeting_id);
-    leave_request.set_session_token("participant-1");
+    leave_request.set_session_token("2001");
     proto::meeting::LeaveMeetingResponse leave_response;
     auto leave_status = service_->LeaveMeeting(&context_, &leave_request, &leave_response);
     ASSERT_TRUE(leave_status.ok());
@@ -58,7 +58,7 @@ TEST_F(MeetingServiceTest, JoinLeaveAndEndFlow) {
     // End Meeting
     proto::meeting::EndMeetingRequest end_request;
     end_request.set_meeting_id(meeting_id);
-    end_request.set_session_token("organizer-1");
+    end_request.set_session_token("1001");
     proto::meeting::EndMeetingResponse end_response;
     auto end_status = service_->EndMeeting(&context_, &end_request, &end_response);
     ASSERT_TRUE(end_status.ok());
