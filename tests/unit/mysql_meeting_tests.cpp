@@ -53,8 +53,8 @@ protected:
         meeting::storage::Options options;
         options.host = GetEnvOr("MEETING_DB_HOST", "127.0.0.1");
         options.port = static_cast<std::uint16_t>(std::stoi(GetEnvOr("MEETING_DB_PORT", "3306")));
-        options.user = GetEnvOr("MEETING_DB_USER", "dev");
-        options.password = GetEnvOr("MEETING_DB_PASSWORD", "devpassed");
+        options.user = GetEnvOr("MEETING_DB_USER", "root");
+        options.password = GetEnvOr("MEETING_DB_PASSWORD", "");
         options.database = GetEnvOr("MEETING_DB_NAME", "meeting");
         pool_ = std::make_shared<meeting::storage::ConnectionPool>(options);
         auto conn = pool_->Acquire();
