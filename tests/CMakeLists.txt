@@ -88,6 +88,7 @@ target_link_libraries(meeting_service_test
     PRIVATE
         GTest::gtest
         GTest::gtest_main
+        user_service
         meeting_service
         meeting_core
         meeting_proto
@@ -147,6 +148,40 @@ set_target_properties(storage_flow_test
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
 )
 add_test(NAME StorageFlowTest COMMAND storage_flow_test)
+
+# Redis 客户端测试
+add_executable(redis_client_test
+    unit/redis_client_test.cpp
+)
+target_link_libraries(redis_client_test
+    PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        meeting_cache
+)
+set_target_properties(redis_client_test
+    PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+add_test(NAME RedisClientTest COMMAND redis_client_test)
+
+# Redis 流程测试（缓存 Session 端到端）
+add_executable(redis_flow_test
+    unit/redis_flow_test.cpp
+)
+target_link_libraries(redis_flow_test
+    PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        user_core
+        meeting_cache
+        thread_pool
+)
+set_target_properties(redis_flow_test
+    PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+add_test(NAME RedisFlowTest COMMAND redis_flow_test)
 
 # 设置测试输出目录
 set_target_properties(meeting_manager_test meeting_service_test

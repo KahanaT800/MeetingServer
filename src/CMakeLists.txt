@@ -40,6 +40,7 @@ target_link_libraries(meeting_common
     PUBLIC
         nlohmann_json::nlohmann_json
         spdlog::spdlog
+        thread_pool
 )
 
 # 线程池库
@@ -83,12 +84,28 @@ target_link_libraries(storage_mysql
         mysqlclient
 )
 
+# Redis 库
+add_library(meeting_cache STATIC
+    cache/redis_client.cpp
+)
+target_include_directories(meeting_cache
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_link_libraries(meeting_cache
+    PUBLIC
+        meeting_common
+        redis++::redis++_static
+)
+
 # 用户核心库 (业务逻辑)
 add_library(user_core STATIC
     core/user/user_manager.cpp
     core/user/session_manager.cpp
     core/user/user_repository.cpp
     core/user/session_repository.cpp
+    core/user/cached_session_repository.cpp
+    core/user/cached_user_repository.cpp
 )
 target_include_directories(user_core
     PUBLIC
@@ -98,6 +115,7 @@ target_include_directories(user_core
 target_link_libraries(user_core
     PUBLIC
         meeting_proto
+        meeting_cache
         OpenSSL::SSL
         OpenSSL::Crypto
 )
@@ -125,6 +143,7 @@ target_link_libraries(user_service
 add_library(meeting_core STATIC
     core/meeting/meeting_manager.cpp
     core/meeting/meeting_repository.cpp
+    core/meeting/cached_meeting_repository.cpp
 )
 target_include_directories(meeting_core
     PUBLIC
@@ -133,6 +152,7 @@ target_include_directories(meeting_core
 target_link_libraries(meeting_core
     PUBLIC
         meeting_proto
+        meeting_cache
 )
 
 # 会议服务库 (gRPC 服务实现)
@@ -145,16 +165,15 @@ target_include_directories(meeting_service
 )
 target_link_libraries(meeting_service
     PUBLIC
-        meeting_common
-        storage_mysql
         meeting_core
         user_core
+        meeting_common
+        storage_mysql
+        meeting_cache
         meeting_proto
         thread_pool
         gRPC::grpc++
 )
-
-
 
 # meeting_server executable
 add_executable(meeting_server

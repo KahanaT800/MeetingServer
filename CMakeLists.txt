@@ -21,6 +21,7 @@ find_package(fmt CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_package(redis++ CONFIG REQUIRED)
 
 # 统一生成目录
 set(PROTO_GEN_DIR "${CMAKE_BINARY_DIR}/generated")

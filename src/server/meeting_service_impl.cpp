@@ -7,6 +7,10 @@
 #include "storage/mysql/connection_pool.hpp"
 #include "storage/mysql/meeting_repository.hpp"
 #include "storage/mysql/session_repository.hpp"
+// redis相关
+#include "cache/redis_client.hpp"
+#include "core/meeting/cached_meeting_repository.hpp"
+#include "core/user/cached_session_repository.hpp"
 
 #include <charconv>
 #include <chrono>
@@ -24,8 +28,24 @@ thread_pool::ThreadPool CreateThreadPool(const std::string& config_path) {
     return thread_pool::ThreadPool(4, 1024);
 }
 
+// 根据配置创建Redis客户端
+std::shared_ptr<meeting::cache::RedisClient> CreateRedisClient() {
+    const auto& config = meeting::common::GlobalConfig();
+    if (!config.cache.redis.enabled) {
+        return nullptr;
+    }
+    auto client = std::make_shared<meeting::cache::RedisClient>(config.cache.redis);
+    auto status = client->Connect();
+    if (!status.IsOk()) {
+        MEETING_LOG_WARN("[MeetingService] Redis init failed, fallback to no cache: {}", status.Message());
+        return nullptr;
+    }
+    return client;
+}
+
 // 根据配置创建会议存储库
-std::shared_ptr<meeting::core::MeetingRepository> CreateMeetingRepository() {
+std::shared_ptr<meeting::core::MeetingRepository> CreateMeetingRepository(
+    const std::shared_ptr<meeting::cache::RedisClient>& redis) {
     const auto& config = meeting::common::GlobalConfig();
     if (!config.storage.mysql.enabled) {
         MEETING_LOG_WARN("[MeetingService] MySQL backend disabled; using in-memory repository");
@@ -50,10 +70,18 @@ std::shared_ptr<meeting::core::MeetingRepository> CreateMeetingRepository() {
         MEETING_LOG_ERROR("[MeetingService] Failed to initialize MySQL connection: {}", test_conn.GetStatus().Message());
         return std::make_shared<meeting::core::InMemoryMeetingRepository>();
     }
-    return std::make_shared<meeting::storage::MySqlMeetingRepository>(std::move(pool));
+
+    // 创建基础仓库
+    auto base_repo = std::make_shared<meeting::storage::MySqlMeetingRepository>(std::move(pool));
+    if (redis) {
+        // 使用缓存包装基础仓库
+        return std::make_shared<meeting::core::CachedMeetingRepository>(base_repo, redis);
+    }
+    return base_repo;
 }
 
-std::shared_ptr<meeting::core::SessionRepository> CreateSessionRepository() {
+std::shared_ptr<meeting::core::SessionRepository> CreateSessionRepository(
+    const std::shared_ptr<meeting::cache::RedisClient>& redis) {
     const auto& config = meeting::common::GlobalConfig();
     if (!config.storage.mysql.enabled) {
         return std::make_shared<meeting::core::InMemorySessionRepository>();
@@ -77,7 +105,14 @@ std::shared_ptr<meeting::core::SessionRepository> CreateSessionRepository() {
         MEETING_LOG_ERROR("[MeetingService] Failed to initialize MySQL session connection: {}", test_conn.GetStatus().Message());
         return std::make_shared<meeting::core::InMemorySessionRepository>();
     }
-    return std::make_shared<meeting::storage::MySqlSessionRepository>(std::move(pool));
+
+    // 创建基础仓库
+    auto base_repo = std::make_shared<meeting::storage::MySqlSessionRepository>(std::move(pool));
+    if (redis) {
+        // 使用缓存包装基础仓库
+        return std::make_shared<meeting::core::CachedSessionRepository>(base_repo, redis);
+    }
+    return base_repo;
 }
 
 // 状态码映射
@@ -133,8 +168,9 @@ meeting::common::StatusOr<std::uint64_t> ResolveUserId(const std::string& token,
 MeetingServiceImpl::MeetingServiceImpl(): MeetingServiceImpl(meeting::common::GetThreadPoolConfigPath()) {}
 
 MeetingServiceImpl::MeetingServiceImpl(const std::string& thread_pool_config_path)
-    : meeting_manager_(std::make_unique<meeting::core::MeetingManager>(meeting::core::MeetingConfig{}, CreateMeetingRepository()))
-    , session_repository_(CreateSessionRepository())
+    : redis_client_(CreateRedisClient())
+    , meeting_manager_(std::make_unique<meeting::core::MeetingManager>(meeting::core::MeetingConfig{}, CreateMeetingRepository(redis_client_)))
+    , session_repository_(CreateSessionRepository(redis_client_))
     , thread_pool_(CreateThreadPool(thread_pool_config_path)) {
     thread_pool_.Start();
 }
