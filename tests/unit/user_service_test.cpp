@@ -1,5 +1,6 @@
 #include "server/user_service_impl.hpp"
 #include "user_service.grpc.pb.h"
+#include "test_mysql_utils.hpp"
 
 #include <gtest/gtest.h>
 #include <grpcpp/grpcpp.h>
@@ -9,6 +10,7 @@ using namespace meeting::server;
 class UserServiceTest : public ::testing::Test {
 protected:
     void SetUp() override {
+        testutils::ClearMysqlTestData();
         user_service_ = std::make_unique<UserServiceImpl>();
     }
 

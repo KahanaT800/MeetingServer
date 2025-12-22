@@ -36,6 +36,18 @@ struct ZookeeperConfig {
     std::string hosts = "127.0.0.1:2181";
 };
 
+// Redis配置结构体
+struct RedisConfig {
+    std::string host = "127.0.0.1";
+    int port = 6379;
+    std::string password = "";
+    int db = 0;
+    int pool_size = 4;
+    int connection_timeout_ms = 500;
+    int socket_timeout_ms = 2000;
+    bool enabled = false;
+};
+
 // Mysql配置结构体
 struct MysqlConfig {
     std::string host = "127.0.0.1";
@@ -55,6 +67,11 @@ struct StorageConfig {
     MysqlConfig mysql;
 };
 
+// 缓存配置结构体
+struct CacheConfig {
+    RedisConfig redis;
+};
+
 // 应用配置结构体
 struct AppConfig {
     ServerConfig server;
@@ -63,6 +80,7 @@ struct AppConfig {
     GeoIPConfig geoip;
     ZookeeperConfig zookeeper;
     StorageConfig storage;
+    CacheConfig cache;
 };
 
 }

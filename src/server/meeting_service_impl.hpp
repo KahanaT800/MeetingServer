@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cache/redis_client.hpp"
 #include "core/meeting/meeting_manager.hpp"
 #include "core/meeting/errors.hpp"
 #include "core/user/session_repository.hpp"
@@ -48,6 +49,7 @@ private:
                          , proto::common::MeetingInfo* info);
 
 private:
+    std::shared_ptr<meeting::cache::RedisClient> redis_client_;
     std::unique_ptr<meeting::core::MeetingManager> meeting_manager_;
     std::shared_ptr<meeting::core::SessionRepository> session_repository_;
     thread_pool::ThreadPool thread_pool_;

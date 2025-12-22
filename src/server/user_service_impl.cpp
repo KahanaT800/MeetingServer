@@ -1,11 +1,17 @@
+// 主服务头文件
 #include "server/user_service_impl.hpp"
 #include "common/config_loader.hpp"
 #include "config_path.hpp"
+// 储存库(mysql)相关头文件
 #include "core/user/user_repository.hpp"
 #include "core/user/session_repository.hpp"
 #include "storage/mysql/connection_pool.hpp"
 #include "storage/mysql/user_repository.hpp"
 #include "storage/mysql/session_repository.hpp"
+// 缓存(redis)相关头文件
+#include "cache/redis_client.hpp"
+#include "core/user/cached_user_repository.hpp"
+#include "core/user/cached_session_repository.hpp"
 
 #include <chrono>
 #include <random>
@@ -13,6 +19,7 @@ namespace meeting {
 namespace server {
 
 namespace {
+// 创建用户相关的线程池
 thread_pool::ThreadPool CreateUserThreadPool(const std::string& path) {
     auto config_loader = thread_pool::ThreadPoolConfigLoader::FromFile(path);
     if (config_loader.has_value()) {
@@ -20,9 +27,32 @@ thread_pool::ThreadPool CreateUserThreadPool(const std::string& path) {
     }
     return thread_pool::ThreadPool(4, 5000);
 }
-
-std::shared_ptr<meeting::core::UserRepository> CreateUserRepository() {
+// 创建Redis客户端
+std::shared_ptr<meeting::cache::RedisClient> CreateRedisClient() {
+    // 读取全局配置
     const auto& config = meeting::common::GlobalConfig();
+    // 如果Redis未启用，则返回空指针
+    if (!config.cache.redis.enabled) {
+        return nullptr;
+    }
+
+    // 创建Redis客户端实例
+    auto client = std::make_shared<meeting::cache::RedisClient>(config.cache.redis);
+    auto status = client->Connect();
+    if (!status.IsOk()) {
+        MEETING_LOG_WARN("[UserService] Redis init failed, fallback to no cache: {}", status.Message());
+        return nullptr;
+    }
+    return client;
+}
+
+// 创建用户存储库
+std::shared_ptr<meeting::core::UserRepository> CreateUserRepository(
+    const std::shared_ptr<meeting::cache::RedisClient>& redis) {
+    
+    // 读取全局配置
+    const auto& config = meeting::common::GlobalConfig();
+    // 如果MySQL未启用，则使用内存中的用户仓库
     if (!config.storage.mysql.enabled) {
         MEETING_LOG_WARN("[UserService] MySQL backend disabled; using in-memory repository");
         // 使用内存中的用户仓库作为后备方案
@@ -51,10 +81,17 @@ std::shared_ptr<meeting::core::UserRepository> CreateUserRepository() {
 
     // 成功创建连接池
     MEETING_LOG_INFO("[UserService] MySQL connection pool initialized successfully");
-    return std::make_shared<meeting::storage::MySQLUserRepository>(std::move(pool));
+    auto base_repo = std::make_shared<meeting::storage::MySQLUserRepository>(std::move(pool));
+    // 如果Redis客户端存在，则使用缓存用户存储库包装基础存储库
+    if (redis) {
+        return std::make_shared<meeting::core::CachedUserRepository>(base_repo, redis);
+    }
+    return base_repo;
 }
 
-std::shared_ptr<meeting::core::SessionRepository> CreateSessionRepository() {
+// 创建会话存储库
+std::shared_ptr<meeting::core::SessionRepository> CreateSessionRepository(
+    const std::shared_ptr<meeting::cache::RedisClient>& redis) {
     const auto& config = meeting::common::GlobalConfig();
     if (!config.storage.mysql.enabled) {
         return std::make_shared<meeting::core::InMemorySessionRepository>();
@@ -78,7 +115,14 @@ std::shared_ptr<meeting::core::SessionRepository> CreateSessionRepository() {
         MEETING_LOG_ERROR("[UserService] Failed to initialize MySQL session connection: {}", test_conn.GetStatus().Message());
         return std::make_shared<meeting::core::InMemorySessionRepository>();
     }
-    return std::make_shared<meeting::storage::MySqlSessionRepository>(std::move(pool));
+    
+    // 成功创建连接池
+    auto base_repo = std::make_shared<meeting::storage::MySqlSessionRepository>(std::move(pool));
+    // 如果Redis客户端存在，则使用缓存会话存储库包装基础存储库
+    if (redis) {
+        return std::make_shared<meeting::core::CachedSessionRepository>(base_repo, redis);
+    }
+    return base_repo;
 }
 
 std::string GenerateToken() {
@@ -107,8 +151,9 @@ std::int64_t NowSeconds() {
 UserServiceImpl::UserServiceImpl(): UserServiceImpl(meeting::common::GetThreadPoolConfigPath()) {}
 
 UserServiceImpl::UserServiceImpl(const std::string& thread_pool_config_path)
-    : user_manager_(std::make_unique<meeting::core::UserManager>(CreateUserRepository()))
-    , session_repository_(CreateSessionRepository())
+    : redis_client_(CreateRedisClient()) // 创建Redis客户端
+    , user_manager_(std::make_unique<meeting::core::UserManager>(CreateUserRepository(redis_client_))) // 创建用户管理器
+    , session_repository_(CreateSessionRepository(redis_client_)) // 创建会话存储库
     , thread_pool_(CreateUserThreadPool(thread_pool_config_path)) {
     // 启动线程池
     thread_pool_.Start();

@@ -24,13 +24,19 @@
       "connection_timeout_ms": 500,
       "read_timeout_ms": 2000,
       "write_timeout_ms": 2000,
-      "enabled": false
+      "enabled": true
     }
   },
   "cache": {
     "redis": {
       "host": "127.0.0.1",
-      "port": 6379
+      "port": 6379,
+      "password": "",
+      "db": 0,
+      "pool_size": 4,
+      "connection_timeout_ms": 500,
+      "socket_timeout_ms": 2000,
+      "enabled": true
     }
   },
   "geoip": {

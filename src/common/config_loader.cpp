@@ -98,6 +98,22 @@ AppConfig ConfigLoader::FromJson(const nlohmann::json& j) {
             cfg.storage.mysql.enabled = mysql.value("enabled", cfg.storage.mysql.enabled);
         }
     }
+
+    // Cache配置
+    if (j.contains("cache")) {
+        const auto& cache = j["cache"];
+        if (cache.contains("redis")) {
+            const auto& redis = cache["redis"];
+            cfg.cache.redis.host = redis.value("host", cfg.cache.redis.host);
+            cfg.cache.redis.port = redis.value("port", cfg.cache.redis.port);
+            cfg.cache.redis.password = redis.value("password", cfg.cache.redis.password);
+            cfg.cache.redis.db = redis.value("db", cfg.cache.redis.db);
+            cfg.cache.redis.pool_size = redis.value("pool_size", cfg.cache.redis.pool_size);
+            cfg.cache.redis.connection_timeout_ms = redis.value("connection_timeout_ms", cfg.cache.redis.connection_timeout_ms);
+            cfg.cache.redis.socket_timeout_ms = redis.value("socket_timeout_ms", cfg.cache.redis.socket_timeout_ms);
+            cfg.cache.redis.enabled = redis.value("enabled", cfg.cache.redis.enabled);
+        }
+    }
     return cfg;
 }
 
