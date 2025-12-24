@@ -1,0 +1,76 @@
+# Stage 1: Build
+FROM ubuntu:24.04 AS builder
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies and build tools
+# libmysqlclient-dev is required for linking against MySQL
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    curl \
+    zip \
+    unzip \
+    tar \
+    pkg-config \
+    libmysqlclient-dev \
+    linux-libc-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Setup vcpkg
+WORKDIR /opt
+RUN git clone https://github.com/microsoft/vcpkg.git
+WORKDIR /opt/vcpkg
+RUN ./bootstrap-vcpkg.sh
+
+# Set vcpkg environment variables
+ENV VCPKG_ROOT=/opt/vcpkg
+ENV PATH=$VCPKG_ROOT:$PATH
+
+# Pre-install dependencies to leverage Docker cache
+# We copy vcpkg.json first so this layer is only rebuilt if dependencies change
+WORKDIR /app
+COPY vcpkg.json .
+RUN vcpkg install
+
+# Copy source code
+COPY . .
+
+# Configure and Build
+# We use the vcpkg toolchain file
+RUN cmake -B build -S . \
+    -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake \
+    -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build build --config Release -j$(nproc)
+
+# Stage 2: Runtime
+FROM ubuntu:24.04
+
+WORKDIR /app
+
+# Install runtime dependencies
+# libmysqlclient21 is needed for the MySQL connection
+# ca-certificates for SSL/TLS
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    libmysqlclient21 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the compiled binary from the builder stage
+COPY --from=builder /app/build/src/meeting_server /app/meeting_server
+
+# Copy configuration and data files
+COPY config /app/config
+COPY ip_data /app/ip_data
+
+# Create logs directory
+RUN mkdir -p /app/logs
+
+# Expose the gRPC port
+EXPOSE 50051
+
+# Set the entrypoint
+CMD ["/app/meeting_server"]

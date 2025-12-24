@@ -14,8 +14,8 @@ TEST(GeoLocationServiceTest, InvalidIp) {
 TEST(GeoLocationServiceTest, PrivateIp) {
     GeoLocationService svc("nonexistent.mmdb");
     auto res = svc.Lookup("192.168.1.1");
-    EXPECT_FALSE(res.IsOk());
-    EXPECT_EQ(res.GetStatus().Code(), meeting::common::StatusCode::kUnauthenticated);
+    EXPECT_TRUE(res.IsOk());
+    EXPECT_TRUE(res.Value().is_private);
 }
 
 TEST(GeoLocationServiceTest, MissingDb) {

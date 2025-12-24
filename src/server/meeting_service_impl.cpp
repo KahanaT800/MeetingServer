@@ -11,10 +11,16 @@
 #include "cache/redis_client.hpp"
 #include "core/meeting/cached_meeting_repository.hpp"
 #include "core/user/cached_session_repository.hpp"
+// Zookeeper相关
+#include "registry/server_registry.hpp"
+#include "scheduler/load_balancer.hpp"
+#include "geo/geo_location_service.hpp"
 
 #include <charconv>
 #include <chrono>
 #include <system_error>
+#include <optional>
+#include <string_view>
 namespace meeting {
 namespace server {
 
@@ -163,6 +169,86 @@ meeting::common::StatusOr<std::uint64_t> ResolveUserId(const std::string& token,
     return meeting::common::StatusOr<std::uint64_t>(value);
 }
 
+// 移除IPv6地址的方括号
+std::string StripBrackets(std::string_view ip) {
+    if (!ip.empty() && ip.front() == '[' && ip.back() == ']') {
+        return std::string(ip.substr(1, ip.size() - 2));
+    }
+    return std::string(ip);
+}
+
+// 从gRPC peer字符串中提取IP地址
+std::string ExtractIpFromPeer(const std::string& peer) {
+    // gRPC peer examples: "ipv4:127.0.0.1:54321", "ipv6:[::1]:54321"
+    if (peer.empty()) {
+        return {};
+    }
+    std::string_view sv(peer);
+    auto pos_prefix = sv.find(':');
+    if (pos_prefix != std::string_view::npos && (sv.rfind("ipv4:", 0) == 0 || sv.rfind("ipv6:", 0) == 0)) {
+        sv.remove_prefix(pos_prefix + 1);
+    }
+    if (!sv.empty() && sv.front() == '[') {
+        auto close = sv.find(']');
+        if (close != std::string_view::npos) {
+            return StripBrackets(sv.substr(0, close + 1));
+        }
+    }
+    auto pos_port = sv.rfind(':');
+    if (pos_port == std::string_view::npos) {
+        return StripBrackets(sv);
+    }
+    return StripBrackets(sv.substr(0, pos_port));
+}
+
+std::string ExtractClientIp(const grpc::ServerContext* context, const proto::meeting::JoinMeetingRequest* request) {
+    auto decode_brackets = [](std::string ip) {
+        auto replace_all = [](std::string& target, std::string_view from, std::string_view to) {
+            std::size_t pos = 0;
+            while ((pos = target.find(from, pos)) != std::string::npos) {
+                target.replace(pos, from.size(), to);
+                pos += to.size();
+            }
+        };
+        replace_all(ip, "%5B", "[");
+        replace_all(ip, "%5D", "]");
+        return ip;
+    };
+
+    if (request && !request->client_info().empty()) {
+        // 传入IP，本地校验在 Geo 查询时完成
+        return StripBrackets(decode_brackets(request->client_info()));
+    }
+    if (context) {
+        return StripBrackets(decode_brackets(ExtractIpFromPeer(context->peer())));
+    }
+    return {};
+}
+
+// 选择合适的会议服务节点
+meeting::registry::NodeInfo PickEndpoint(const meeting::scheduler::LoadBalancer* lb,
+                                         const meeting::registry::NodeInfo& self_node,
+                                         const meeting::geo::GeoLocationService* geo_service,
+                                         const std::string& client_ip) {
+    meeting::geo::GeoInfo geo; // 默认地理信息
+    if (geo_service && !client_ip.empty()) {
+        auto geo_res = geo_service->Lookup(client_ip);
+        if (geo_res.IsOk()) {
+            geo = geo_res.Value();
+        } else {
+            MEETING_LOG_WARN("[MeetingService] Geo lookup failed for {}: {}", client_ip, geo_res.GetStatus().Message());
+        }
+    }
+    std::optional<meeting::registry::NodeInfo> selected; // 选择的节点
+    if (lb) {
+        selected = lb->Select(geo);
+    }
+    if (selected.has_value()) {
+        return *selected;
+    }
+    return self_node;
+}
+
 } // namespace
 
 MeetingServiceImpl::MeetingServiceImpl(): MeetingServiceImpl(meeting::common::GetThreadPoolConfigPath()) {}
@@ -171,18 +257,33 @@ MeetingServiceImpl::MeetingServiceImpl(const std::string& thread_pool_config_pat
     : redis_client_(CreateRedisClient())
     , meeting_manager_(std::make_unique<meeting::core::MeetingManager>(meeting::core::MeetingConfig{}, CreateMeetingRepository(redis_client_)))
     , session_repository_(CreateSessionRepository(redis_client_))
+    , registry_(std::make_shared<meeting::registry::ServerRegistry>(meeting::common::GlobalConfig().zookeeper.hosts))
+    , load_balancer_(std::make_shared<meeting::scheduler::LoadBalancer>(registry_))
+    , geo_service_(std::make_shared<meeting::geo::GeoLocationService>(meeting::common::GlobalConfig().geoip.db_path))
+    , self_node_()
     , thread_pool_(CreateThreadPool(thread_pool_config_path)) {
+
     thread_pool_.Start();
+    self_node_.host = meeting::common::GlobalConfig().server.host;
+    self_node_.port = meeting::common::GlobalConfig().server.port;
+    self_node_.region = "default";
+    // 自注册当前节点
+    registry_->Register(self_node_);
 }
 
 
 MeetingServiceImpl::~MeetingServiceImpl() {
+    if (registry_) {
+        // 注销当前节点
+        registry_->Unregister(self_node_);
+    }
     thread_pool_.Stop();
 }
 
-grpc::Status MeetingServiceImpl::CreateMeeting(grpc::ServerContext*
+grpc::Status MeetingServiceImpl::CreateMeeting(grpc::ServerContext* context
                                                 , const proto::meeting::CreateMeetingRequest* request
                                                 , proto::meeting::CreateMeetingResponse* response) {
+    (void)context; // 未使用
     auto organizer_id_or = ResolveUserId(request->session_token(), session_repository_.get(),
                                          !meeting::common::GlobalConfig().storage.mysql.enabled);
     if (!organizer_id_or.IsOk()) {
@@ -210,7 +311,7 @@ grpc::Status MeetingServiceImpl::CreateMeeting(grpc::ServerContext*
     return grpc::Status::OK;
 }
 
-grpc::Status MeetingServiceImpl::JoinMeeting(grpc::ServerContext*
+grpc::Status MeetingServiceImpl::JoinMeeting(grpc::ServerContext* context
                                               , const proto::meeting::JoinMeetingRequest* request
                                               , proto::meeting::JoinMeetingResponse* response) {
     auto participant_or = ResolveUserId(request->session_token(), session_repository_.get(),
@@ -237,16 +338,20 @@ grpc::Status MeetingServiceImpl::JoinMeeting(grpc::ServerContext*
     meeting::core::ErrorToProto(meeting::core::MeetingErrorCode::kOk
                                 , meeting::common::Status::OK()
                                 , response->mutable_error());
+    // 选择合适的会议服务节点
+    const auto client_ip = ExtractClientIp(context, request);
+    auto endpoint_node = PickEndpoint(load_balancer_.get(), self_node_, geo_service_.get(), client_ip);
     auto* endpoint = response->mutable_endpoint();
-    endpoint->set_ip("0.0.0.0");
-    endpoint->set_port(0);
-    endpoint->set_region("default");
+    endpoint->set_ip(endpoint_node.host);
+    endpoint->set_port(endpoint_node.port);
+    endpoint->set_region(endpoint_node.region);
     return grpc::Status::OK;
 }
 
-grpc::Status MeetingServiceImpl::LeaveMeeting(grpc::ServerContext*
+grpc::Status MeetingServiceImpl::LeaveMeeting(grpc::ServerContext* context
                                               , const proto::meeting::LeaveMeetingRequest* request
                                               , proto::meeting::LeaveMeetingResponse* response) {
+    (void)context; // 未使用
     auto participant_or = ResolveUserId(request->session_token(), session_repository_.get(),
                                         !meeting::common::GlobalConfig().storage.mysql.enabled);
     if (!participant_or.IsOk()) {
@@ -272,9 +377,10 @@ grpc::Status MeetingServiceImpl::LeaveMeeting(grpc::ServerContext*
     return grpc::Status::OK;
 }
 
-grpc::Status MeetingServiceImpl::EndMeeting(grpc::ServerContext*
+grpc::Status MeetingServiceImpl::EndMeeting(grpc::ServerContext* context
                                              , const proto::meeting::EndMeetingRequest* request
                                              , proto::meeting::EndMeetingResponse* response) {
+    (void)context; // 未使用
     auto requester_or = ResolveUserId(request->session_token(), session_repository_.get(),
                                       !meeting::common::GlobalConfig().storage.mysql.enabled);
     if (!requester_or.IsOk()) {
@@ -300,9 +406,10 @@ grpc::Status MeetingServiceImpl::EndMeeting(grpc::ServerContext*
     return grpc::Status::OK;
 }
 
-grpc::Status MeetingServiceImpl::GetMeeting(grpc::ServerContext*
+grpc::Status MeetingServiceImpl::GetMeeting(grpc::ServerContext* context
                                              , const proto::meeting::GetMeetingRequest* request
                                              , proto::meeting::GetMeetingResponse* response) {
+    (void)context; // 未使用
     auto get_future = thread_pool_.Submit([this, id = request->meeting_id()]() {
         return meeting_manager_->GetMeeting(id);
     });

@@ -169,6 +169,9 @@ target_link_libraries(meeting_service
         user_core
         meeting_common
         storage_mysql
+        meeting_registry
+        unofficial::zookeeper::zookeeper
+        unofficial::zookeeper::hashtable
         meeting_cache
         meeting_proto
         thread_pool
@@ -189,6 +192,23 @@ target_link_libraries(meeting_geo
         maxminddb::maxminddb
 )
 
+# Zookeeper 注册中心库
+add_library(meeting_registry STATIC
+    registry/server_registry.cpp
+    scheduler/load_balancer.cpp
+)
+target_include_directories(meeting_registry
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_link_libraries(meeting_registry
+    PUBLIC
+        meeting_common
+        meeting_geo
+        unofficial::zookeeper::zookeeper
+        unofficial::zookeeper::hashtable
+)
+
 # meeting_server executable
 add_executable(meeting_server
     server/main.cpp
@@ -205,6 +225,7 @@ target_link_libraries(meeting_server
         user_service
         meeting_proto
         thread_pool
+        meeting_registry
         gRPC::grpc++
 )
 

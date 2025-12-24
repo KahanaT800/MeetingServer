@@ -57,6 +57,16 @@ bool GeoLocationService::IsPrivateIpv4(uint32_t addr) const {
 
 // 检查是否为私有 IPv6 地址
 bool GeoLocationService::IsPrivateIpv6(const unsigned char* addr) const {
+    // ::1 Loopback
+    bool is_loopback = true;
+    for (int i = 0; i < 15; ++i) {
+        if (addr[i] != 0) {
+            is_loopback = false;
+            break;
+        }
+    }
+    if (is_loopback && addr[15] == 1) return true;
+
     // fe80::/10 链路本地；fc00::/7 ULA
     return (addr[0] == 0xfe && (addr[1] & 0xc0) == 0x80) ||
            ((addr[0] & 0xfe) == 0xfc);
@@ -89,12 +99,12 @@ meeting::common::StatusOr<GeoInfo> GeoLocationService::Lookup(const std::string&
     if (is_v4 && IsPrivateIpv4(ipv4.s_addr)) {
         GeoInfo info;
         info.is_private = true;
-        return meeting::common::Status::Unauthenticated("private ip");
+        return meeting::common::StatusOr<GeoInfo>(info);
     }
     if (is_v6 && IsPrivateIpv6(ipv6.s6_addr)) {
         GeoInfo info;
         info.is_private = true;
-        return meeting::common::Status::Unauthenticated("private ip");
+        return meeting::common::StatusOr<GeoInfo>(info);
     }
 
     if (!db_available_) {

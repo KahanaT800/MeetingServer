@@ -1,0 +1,48 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 50051
+  },
+  "logging": {
+    "level": "info",
+    "pattern": "[%Y-%m-%d %H:%M:%S.%e][%^%l%$][%t] %v",
+    "console": true,
+    "file": "logs/meeting_server.log",
+    "integrate_thread_pool_logger": true
+  },
+  "thread_pool": {
+    "config_path": "config/thread_pool.json"
+  },
+  "storage": {
+    "mysql": {
+      "host": "mysql",
+      "port": 3306,
+      "user": "dev",
+      "password": "devpassed",
+      "database": "meeting",
+      "pool_size": 10,
+      "connection_timeout_ms": 500,
+      "read_timeout_ms": 2000,
+      "write_timeout_ms": 2000,
+      "enabled": true
+    }
+  },
+  "cache": {
+    "redis": {
+      "host": "redis",
+      "port": 6379,
+      "password": "",
+      "db": 0,
+      "pool_size": 4,
+      "connect_timeout_ms": 500,
+      "socket_timeout_ms": 2000,
+      "enabled": true
+    }
+  },
+  "geoip": {
+    "db_path": "ip_data/GeoLite2-City.mmdb"
+  },
+  "zookeeper": {
+    "hosts": "zookeeper:2181"
+  }
+}

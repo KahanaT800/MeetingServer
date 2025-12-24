@@ -90,6 +90,7 @@ target_link_libraries(meeting_service_test
         GTest::gtest_main
         user_service
         meeting_service
+        meeting_registry
         meeting_core
         meeting_proto
         thread_pool
@@ -202,6 +203,24 @@ set_target_properties(geo_location_test
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
 )
 add_test(NAME GeoLocationServiceTest COMMAND geo_location_test)
+
+# Zookeeper 注册中心集成测试
+add_executable(server_registry_test
+    unit/test_server_registry.cpp
+)
+target_link_libraries(server_registry_test
+    PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        meeting_registry
+        meeting_common
+        thread_pool
+)
+set_target_properties(server_registry_test
+    PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+add_test(NAME ServerRegistryTest COMMAND server_registry_test)
 
 # 设置测试输出目录
 set_target_properties(meeting_manager_test meeting_service_test

@@ -1,0 +1,24 @@
+FROM ubuntu:24.04
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    libmysqlclient21 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy locally built binary (Debug build)
+COPY build/debug/meeting_server /app/meeting_server
+
+# Copy configuration and data
+COPY config /app/config
+COPY ip_data /app/ip_data
+RUN mkdir -p /app/logs
+
+# Expose the gRPC port
+EXPOSE 50051
+
+# Run the server
+CMD ["./meeting_server"]

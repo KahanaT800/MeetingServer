@@ -1,0 +1,68 @@
+version: "3.9"
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    container_name: meeting_server
+    restart: unless-stopped
+    ports:
+      - "50051:50051"
+    environment:
+      - MEETING_SERVER_CONFIG=config/app.docker.json
+    depends_on:
+      - zookeeper
+      - redis
+      - mysql
+    networks:
+      - meeting_net
+
+  zookeeper:
+    image: zookeeper:3.8
+    container_name: meeting_zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    ports:
+      - "2182:2181"
+    networks:
+      - meeting_net
+
+  redis:
+    image: redis:7
+    container_name: meeting_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - meeting_net
+
+  mysql:
+    image: mysql:8.0
+    container_name: meeting_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: meeting
+      MYSQL_USER: dev
+      MYSQL_PASSWORD: devpassed
+    ports:
+      - "3307:3306"
+    command:
+      - --default-authentication-plugin=mysql_native_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    networks:
+      - meeting_net
+
+volumes:
+  redis_data:
+  mysql_data:
+
+networks:
+  meeting_net:

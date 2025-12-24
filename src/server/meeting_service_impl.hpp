@@ -8,6 +8,11 @@
 #include "thread_pool/thread_pool.hpp"
 #include "common/logger.hpp"
 #include "config_path.hpp"
+// Zookeeper相关
+#include "registry/server_registry.hpp"
+#include "scheduler/load_balancer.hpp"
+#include "geo/geo_location_service.hpp"
+
 #include "meeting_service.grpc.pb.h"
 
 #include <grpcpp/grpcpp.h>
@@ -49,10 +54,17 @@ private:
                          , proto::common::MeetingInfo* info);
 
 private:
-    std::shared_ptr<meeting::cache::RedisClient> redis_client_;
-    std::unique_ptr<meeting::core::MeetingManager> meeting_manager_;
-    std::shared_ptr<meeting::core::SessionRepository> session_repository_;
+    std::shared_ptr<meeting::cache::RedisClient> redis_client_; // Redis客户端
+    std::unique_ptr<meeting::core::MeetingManager> meeting_manager_; // 会议管理器
+    std::shared_ptr<meeting::core::SessionRepository> session_repository_; // 会话存储库
+
+    std::shared_ptr<meeting::registry::ServerRegistry> registry_; // 服务器注册中心
+    std::shared_ptr<meeting::scheduler::LoadBalancer> load_balancer_; // 负载均衡器
+    std::shared_ptr<meeting::geo::GeoLocationService> geo_service_; // 地理位置服务
+    meeting::registry::NodeInfo self_node_; // 本节点信息
+
     thread_pool::ThreadPool thread_pool_;
+
 };
 
 } // namespace server

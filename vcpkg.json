@@ -1,0 +1,15 @@
+{
+  "name": "meeting-server",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "protobuf",
+    "grpc",
+    "fmt",
+    "spdlog",
+    "nlohmann-json",
+    "openssl",
+    "redis-plus-plus",
+    "libmaxminddb",
+    "zookeeper"
+  ]
+}
