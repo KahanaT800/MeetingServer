@@ -97,4 +97,7 @@ echo "运行 Redis 客户端测试..."
 echo "运行 Redis 会话缓存全流程测试..."
 ./tests/redis_flow_test
 
+echo "运行 GeoLocationService 测试..."
+./tests/geo_location_test
+
 echo "所有测试完成！"

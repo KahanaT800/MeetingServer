@@ -40,7 +40,7 @@
     }
   },
   "geoip": {
-    "db_path": "/var/lib/GeoLite2-City.mmdb"
+    "db_path": "ip_data/GeoLite2-City.mmdb"
   },
   "zookeeper": {
     "hosts": "127.0.0.1:2181"

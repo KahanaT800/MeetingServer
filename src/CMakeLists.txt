@@ -175,6 +175,20 @@ target_link_libraries(meeting_service
         gRPC::grpc++
 )
 
+# GeoLocationService 库
+add_library(meeting_geo STATIC
+    geo/geo_location_service.cpp
+)
+target_include_directories(meeting_geo
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_link_libraries(meeting_geo
+    PUBLIC
+        meeting_common
+        maxminddb::maxminddb
+)
+
 # meeting_server executable
 add_executable(meeting_server
     server/main.cpp
@@ -193,3 +207,13 @@ target_link_libraries(meeting_server
         thread_pool
         gRPC::grpc++
 )
+
+# 工具：geo_lookup - 用于测试 IP 地理位置查询
+add_executable(geo_lookup
+    ${CMAKE_SOURCE_DIR}/src/utils/geo_lookup.cpp
+)
+target_link_libraries(geo_lookup
+    PRIVATE
+        meeting_geo
+)
+

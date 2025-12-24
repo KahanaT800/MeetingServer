@@ -183,6 +183,26 @@ set_target_properties(redis_flow_test
 )
 add_test(NAME RedisFlowTest COMMAND redis_flow_test)
 
+# GeoLocationService 测试
+add_executable(geo_location_test
+    unit/test_geo_location_service.cpp
+)
+target_link_libraries(geo_location_test
+    PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        meeting_geo
+)
+target_compile_definitions(geo_location_test
+    PRIVATE
+        GEOIP_TEST_DB_PATH=\"${CMAKE_SOURCE_DIR}/ip_data/GeoLite2-City.mmdb\"
+)
+set_target_properties(geo_location_test
+    PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+)
+add_test(NAME GeoLocationServiceTest COMMAND geo_location_test)
+
 # 设置测试输出目录
 set_target_properties(meeting_manager_test meeting_service_test
     PROPERTIES
