@@ -108,6 +108,11 @@ jobs:
         sed -i 's/"host": "mysql"/"host": "127.0.0.1"/g' config/app.ci.json
         sed -i 's/"host": "redis"/"host": "127.0.0.1"/g' config/app.ci.json
         sed -i 's/"host": "zookeeper"/"host": "127.0.0.1"/g' config/app.ci.json
+        # Fix Redis port: app.docker.json uses 6379, which is correct for CI service
+        # Fix Zookeeper port: app.docker.json uses 2181, which is correct for CI service
+        # Fix MySQL user/pass: app.docker.json uses dev/devpassed, but CI service uses root/rootpass
+        sed -i 's/"user": "dev"/"user": "root"/g' config/app.ci.json
+        sed -i 's/"password": "devpassed"/"password": "rootpass"/g' config/app.ci.json
 
     - name: Run Integration Tests
       env:
