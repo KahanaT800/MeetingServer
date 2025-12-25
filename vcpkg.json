@@ -10,6 +10,7 @@
     "openssl",
     "redis-plus-plus",
     "libmaxminddb",
-    "zookeeper"
+    "zookeeper",
+    "gtest"
   ]
 }

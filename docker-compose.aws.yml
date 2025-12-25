@@ -1,0 +1,77 @@
+version: "3.9"
+
+services:
+  server:
+    # 在服务器上，我们直接拉取构建好的镜像，而不是本地构建
+    image: ${IMAGE_URI} 
+    container_name: meeting_server
+    restart: always
+    ports:
+      - "50051:50051"
+    environment:
+      - MEETING_SERVER_CONFIG=config/app.docker.json
+    depends_on:
+      - zookeeper
+      - redis
+      - mysql
+    networks:
+      - meeting_net
+    # 日志配置 (可选，推荐使用 awslogs 驱动发送到 CloudWatch，这里先用默认)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  zookeeper:
+    image: zookeeper:3.8
+    container_name: meeting_zookeeper
+    restart: always
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    # 生产环境通常不需要暴露 Zookeeper 端口给外部
+    # ports:
+    #   - "2182:2181"
+    networks:
+      - meeting_net
+
+  redis:
+    image: redis:7
+    container_name: meeting_redis
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    # 生产环境通常不需要暴露 Redis 端口给外部
+    # ports:
+    #   - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - meeting_net
+
+  mysql:
+    image: mysql:8.0
+    container_name: meeting_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: meeting
+      MYSQL_USER: dev
+      MYSQL_PASSWORD: devpassed
+    # 生产环境通常不需要暴露 MySQL 端口给外部
+    # ports:
+    #   - "3307:3306"
+    command:
+      - --default-authentication-plugin=mysql_native_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 注意：生产环境初始化脚本可能只需要运行一次
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    networks:
+      - meeting_net
+
+volumes:
+  redis_data:
+  mysql_data:
+
+networks:
+  meeting_net:

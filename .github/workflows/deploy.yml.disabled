@@ -1,0 +1,88 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-northeast-1 # 请根据你的 AWS 区域修改，例如 us-east-1
+  ECR_REPOSITORY: meeting-server
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image_uri: ${{ steps.build-image.outputs.image }}
+      registry: ${{ steps.login-ecr.outputs.registry }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build, tag, and push image to Amazon ECR
+      id: build-image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile.production .
+        docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@v1.0.3
+      env:
+        IMAGE_URI: ${{ needs.build-and-push.outputs.image_uri }}
+        AWS_REGION: ${{ env.AWS_REGION }}
+        MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        envs: IMAGE_URI,AWS_REGION,MYSQL_ROOT_PASSWORD
+        script: |
+          # 停止脚本执行如果出现错误
+          set -e
+          
+          # 创建或进入项目目录
+          mkdir -p ~/meeting-server
+          cd ~/meeting-server
+          
+          # 拉取最新代码 (确保服务器上安装了 git)
+          # 如果是私有仓库，需要配置 SSH Key 或 Token，这里假设是公开或者已配置好
+          if [ ! -d ".git" ]; then
+            git clone https://github.com/${{ github.repository }}.git .
+          else
+            git fetch origin
+            git reset --hard origin/main
+          fi
+          
+          # 登录 ECR
+          # 注意：EC2 实例需要安装 AWS CLI，并且具有 ECR 读取权限 (IAM Role)
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $(echo $IMAGE_URI | cut -d/ -f1)
+          
+          # 更新服务
+          export IMAGE_URI=$IMAGE_URI
+          export MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD
+          
+          docker-compose -f docker-compose.aws.yml pull
+          docker-compose -f docker-compose.aws.yml up -d
+          
+          echo "Deployment successful!"
