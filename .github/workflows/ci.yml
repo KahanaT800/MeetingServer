@@ -202,6 +202,12 @@ jobs:
           port: 22
           envs: IMAGE_URI,CONTAINER_NAME
           script: |
+            # 遇到错误立即停止
+            set -e
+
+            # 强制将镜像名转换为小写 (Docker 要求)
+            IMAGE_URI=$(echo "$IMAGE_URI" | tr '[:upper:]' '[:lower:]')
+
             # 1. 登录 GitHub Container Registry (如果镜像是私有的)
             # 注意：您需要在 EC2 上预先执行一次 docker login ghcr.io -u <USERNAME> -p <TOKEN>
             # 或者在这里传递密码（不推荐在日志中暴露）
@@ -223,6 +229,7 @@ jobs:
               --name $CONTAINER_NAME \
               --restart unless-stopped \
               --network host \
+              -e MEETING_SERVER_CONFIG=/app/config/app.docker.json \
               -v /home/${{ secrets.EC2_USER }}/logs:/app/logs \
               -v /home/${{ secrets.EC2_USER }}/infrastructure/app.prod.json:/app/config/app.docker.json \
               $IMAGE_URI
