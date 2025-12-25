@@ -1,11 +1,12 @@
 # Stage 1: Build
-FROM ubuntu:24.04 AS builder
+FROM ubuntu:22.04 AS builder
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies and build tools
 # libmysqlclient-dev is required for linking against MySQL
+# autoconf, libtool, bison, flex are often required by vcpkg ports (like zookeeper)
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
@@ -17,6 +18,10 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libmysqlclient-dev \
     linux-libc-dev \
+    autoconf \
+    libtool \
+    bison \
+    flex \
     && rm -rf /var/lib/apt/lists/*
 
 # Setup vcpkg
@@ -46,7 +51,7 @@ RUN cmake -B build -S . \
     && cmake --build build --config Release -j$(nproc)
 
 # Stage 2: Runtime
-FROM ubuntu:24.04
+FROM ubuntu:22.04
 
 WORKDIR /app
 
