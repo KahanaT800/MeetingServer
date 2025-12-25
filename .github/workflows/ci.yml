@@ -34,6 +34,15 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Free Disk Space
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
+        df -h
+
     - name: Install System Dependencies
       run: |
         sudo apt-get update
@@ -63,10 +72,10 @@ jobs:
         $VCPKG_ROOT/vcpkg install
 
     - name: Configure CMake
-      run: cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake -DCMAKE_BUILD_TYPE=Debug
+      run: cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
 
     - name: Build
-      run: cmake --build build --parallel 2
+      run: cmake --build build --parallel 2 --config Release
 
     - name: Run Unit Tests
       run: |
@@ -105,7 +114,10 @@ jobs:
         MEETING_SERVER_CONFIG: config/app.ci.json
         SERVER_ADDRESS: localhost:50051
       run: |
-        ./build/src/meeting_server &
+        # Locate binary (it might be in build/ or build/src/ depending on CMake config)
+        SERVER_BIN=$(find build -name meeting_server -type f | head -n 1)
+        chmod +x $SERVER_BIN
+        $SERVER_BIN &
         SERVER_PID=$!
         sleep 10
         python3 tests/integration/test_e2e.py
