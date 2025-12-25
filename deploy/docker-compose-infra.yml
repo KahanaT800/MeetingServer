@@ -1,0 +1,35 @@
+version: "3.9"
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: meeting_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: meeting
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 初始化脚本挂载
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  redis:
+    image: redis:7
+    container_name: meeting_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  zookeeper:
+    image: zookeeper:3.8
+    container_name: meeting_zookeeper
+    restart: always
+    ports:
+      - "2181:2181"
+
+volumes:
+  mysql_data:
+  redis_data:

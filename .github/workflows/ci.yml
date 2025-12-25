@@ -181,3 +181,50 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  # Job 3: Deploy - 部署到 AWS EC2
+  deploy-to-ec2:
+    needs: package-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          # 传递必要的环境变量到远程脚本
+          IMAGE_URI: ghcr.io/${{ github.repository }}:latest
+          CONTAINER_NAME: meeting_server
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          envs: IMAGE_URI,CONTAINER_NAME
+          script: |
+            # 1. 登录 GitHub Container Registry (如果镜像是私有的)
+            # 注意：您需要在 EC2 上预先执行一次 docker login ghcr.io -u <USERNAME> -p <TOKEN>
+            # 或者在这里传递密码（不推荐在日志中暴露）
+            
+            # 2. 拉取最新镜像
+            echo "Pulling latest image: $IMAGE_URI"
+            docker pull $IMAGE_URI
+            
+            # 3. 停止并删除旧容器
+            echo "Stopping old container..."
+            docker stop $CONTAINER_NAME || true
+            docker rm $CONTAINER_NAME || true
+            
+            # 4. 启动新容器
+            # 注意：这里假设您已经配置好了网络 (meeting_net) 和数据库
+            # 生产环境建议挂载真实配置文件: -v /etc/meeting/config.json:/app/config/app.docker.json
+            echo "Starting new container..."
+            docker run -d \
+              --name $CONTAINER_NAME \
+              --restart unless-stopped \
+              --network host \
+              -v /home/${{ secrets.EC2_USER }}/logs:/app/logs \
+              $IMAGE_URI
+            
+            # 5. 清理未使用的镜像
+            docker image prune -f
