@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meeting Server 测试客户端</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding-top: 20px; background-color: #f8f9fa; }
+        .card { margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        #console-log { background: #212529; color: #00ff00; font-family: monospace; padding: 15px; height: 300px; overflow-y: auto; border-radius: 5px; }
+        .status-badge { position: fixed; top: 10px; right: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 class="mb-4">🎥 Meeting Server 测试台</h2>
+        
+        <div class="row">
+            <!-- 左侧：操作面板 -->
+            <div class="col-md-6">
+                
+                <!-- 1. 用户认证 -->
+                <div class="card">
+                    <div class="card-header bg-primary text-white">👤 用户认证</div>
+                    <div class="card-body">
+                        <ul class="nav nav-tabs mb-3" id="authTab" role="tablist">
+                            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#register">注册</button></li>
+                            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#login">登录</button></li>
+                        </ul>
+                        
+                        <div class="tab-content">
+                            <!-- 注册表单 -->
+                            <div class="tab-pane fade show active" id="register">
+                                <div class="mb-2"><input type="text" class="form-control" id="reg-username" placeholder="用户名"></div>
+                                <div class="mb-2"><input type="password" class="form-control" id="reg-password" placeholder="密码" value="password123"></div>
+                                <div class="mb-2"><input type="email" class="form-control" id="reg-email" placeholder="邮箱"></div>
+                                <button class="btn btn-success w-100" onclick="doRegister()">注册</button>
+                            </div>
+                            <!-- 登录表单 -->
+                            <div class="tab-pane fade" id="login">
+                                <div class="mb-2"><input type="text" class="form-control" id="login-username" placeholder="用户名"></div>
+                                <div class="mb-2"><input type="password" class="form-control" id="login-password" placeholder="密码" value="password123"></div>
+                                <button class="btn btn-primary w-100" onclick="doLogin()">登录</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 会议管理 -->
+                <div class="card">
+                    <div class="card-header bg-success text-white">📅 会议管理</div>
+                    <div class="card-body">
+                        <div class="alert alert-warning" id="token-alert" style="display:block">请先登录以获取 Token</div>
+                        
+                        <div id="meeting-controls" style="opacity: 0.5; pointer-events: none;">
+                            <div class="mb-3">
+                                <label>创建会议</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="meeting-topic" placeholder="会议主题" value="测试会议">
+                                    <button class="btn btn-success" onclick="createMeeting()">创建</button>
+                                </div>
+                            </div>
+                            
+                            <hr>
+                            
+                            <div class="mb-3">
+                                <label>加入/查询会议</label>
+                                <div class="input-group mb-2">
+                                    <input type="text" class="form-control" id="meeting-id" placeholder="Meeting ID">
+                                    <button class="btn btn-info" onclick="getMeeting()">查询</button>
+                                    <button class="btn btn-primary" onclick="joinMeeting()">加入</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 右侧：日志输出 -->
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <span>📟 控制台日志</span>
+                        <button class="btn btn-sm btn-outline-light" onclick="clearLog()">清空</button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="console-log"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
