@@ -1,0 +1,48 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 50051
+  },
+  "logging": {
+    "level": "info",
+    "pattern": "[%Y-%m-%d %H:%M:%S.%e][%^%l%$][%t] %v",
+    "console": true,
+    "file": "logs/meeting_server.log",
+    "integrate_thread_pool_logger": true
+  },
+  "thread_pool": {
+    "config_path": "config/thread_pool.json"
+  },
+  "storage": {
+    "mysql": {
+      "host": "127.0.0.1",
+      "port": 3306,
+      "user": "root",
+      "password": "rootpass",
+      "database": "meeting",
+      "pool_size": 10,
+      "connection_timeout_ms": 500,
+      "read_timeout_ms": 2000,
+      "write_timeout_ms": 2000,
+      "enabled": true
+    }
+  },
+  "cache": {
+    "redis": {
+      "host": "127.0.0.1",
+      "port": 6379,
+      "password": "",
+      "pool_size": 5,
+      "enabled": true
+    }
+  },
+  "registry": {
+    "zookeeper": {
+      "host": "127.0.0.1:2181",
+      "timeout_ms": 10000,
+      "retry_count": 3,
+      "retry_interval_ms": 1000,
+      "enabled": true
+    }
+  }
+}

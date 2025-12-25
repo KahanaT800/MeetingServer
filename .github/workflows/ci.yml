@@ -224,6 +224,7 @@ jobs:
               --restart unless-stopped \
               --network host \
               -v /home/${{ secrets.EC2_USER }}/logs:/app/logs \
+              -v /home/${{ secrets.EC2_USER }}/infrastructure/app.prod.json:/app/config/app.docker.json \
               $IMAGE_URI
             
             # 5. 清理未使用的镜像
