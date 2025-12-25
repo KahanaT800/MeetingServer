@@ -1,0 +1,29 @@
+# 这是一个纯打包用的 Dockerfile，用于 CI 环境
+# 它假设二进制文件已经由外部（CI Job 1）编译好了
+FROM ubuntu:22.04
+
+WORKDIR /app
+
+# 安装运行时依赖
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    libmysqlclient21 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 直接复制已经编译好的二进制文件
+# 注意：这里不需要编译环境，也不需要 vcpkg
+COPY meeting_server /app/meeting_server
+
+# 复制配置和数据
+COPY config /app/config
+COPY ip_data /app/ip_data
+
+# 创建日志目录
+RUN mkdir -p /app/logs
+
+# 暴露端口
+EXPOSE 50051
+
+# 启动命令
+CMD ["/app/meeting_server"]
